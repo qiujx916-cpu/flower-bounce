@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pandoc \"/Users/qiu/Documents/test/网页端2D小游戏需求文档.docx\" -o /tmp/game_req.md)",
+      "Read(//tmp/**)",
+      "Bash(python3 -c \":*)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(node -c main.js)",
+      "Read(//usr/local/**)",
+      "Read(//opt/homebrew/**)",
+      "Bash(lsof -ti:8080)",
+      "Bash(curl -s http://localhost:8080/main.js)",
+      "Bash(git clone:*)",
+      "Bash(npm install:*)",
+      "Bash(bash ./install.sh --dry-run --target claude)",
+      "Bash(curl -s \"http://localhost:8080/main.js?v=7\")"
+    ]
+  }
+}
