@@ -1196,9 +1196,9 @@ function drawMobileSwapButton(ctx) {
   if (gameState === 'countdown') {
     const blink = Math.sin(Date.now() * 0.006) * 0.5 + 0.5; // 0~1 oscillation
     ctx.fillStyle = `rgba(233,30,99,${blink * 0.7})`;
-    ctx.font = 'bold 13px "Segoe UI", sans-serif';
+    ctx.font = 'bold 26px "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('点击切换方向', b.cx, b.cy + b.radius + 20);
+    ctx.fillText('点击切换方向', b.cx + 50, b.cy + b.radius + 28);
   }
 }
 
