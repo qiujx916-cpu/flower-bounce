@@ -50,9 +50,8 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* ---- Mobile: touch device OR small landscape screen ---- */
-/* Use pointer:coarse for real devices, height<=500 as fallback for small screens */
-@media (pointer: coarse), (max-height: 450px) and (orientation: landscape) {
+/* ---- Mobile: small touch screen only (not desktop with touchscreen) ---- */
+@media (pointer: coarse) and (max-width: 1024px) {
   body {
     background: #1a1a2e;
     cursor: auto;
