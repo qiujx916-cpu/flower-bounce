@@ -1149,7 +1149,7 @@ function drawIconButton(ctx, x, y, size, emoji) {
 
 // --- Mobile Swap Button ---
 // Circle button, left-center area, always visible on mobile
-const SWAP_BTN = { cx: 65, cy: 400, radius: 40 };
+const SWAP_BTN = { cx: 75, cy: 400, radius: 55 };
 
 function drawMobileSwapButton(ctx) {
   const b = SWAP_BTN;
@@ -1174,17 +1174,17 @@ function drawMobileSwapButton(ctx) {
   ctx.save();
   ctx.translate(b.cx, b.cy);
   ctx.strokeStyle = `rgba(233,30,99,${iconAlpha})`;
-  ctx.lineWidth = 2.8;
+  ctx.lineWidth = 3.2;
   ctx.lineCap = 'round';
   // Left arrow
   ctx.beginPath();
-  ctx.moveTo(14, -7); ctx.lineTo(-14, -7);
-  ctx.moveTo(-9, -13); ctx.lineTo(-14, -7); ctx.lineTo(-9, -1);
+  ctx.moveTo(20, -9); ctx.lineTo(-20, -9);
+  ctx.moveTo(-14, -16); ctx.lineTo(-20, -9); ctx.lineTo(-14, -2);
   ctx.stroke();
   // Right arrow
   ctx.beginPath();
-  ctx.moveTo(-14, 7); ctx.lineTo(14, 7);
-  ctx.moveTo(9, 1); ctx.lineTo(14, 7); ctx.lineTo(9, 13);
+  ctx.moveTo(-20, 9); ctx.lineTo(20, 9);
+  ctx.moveTo(14, 2); ctx.lineTo(20, 9); ctx.lineTo(14, 16);
   ctx.stroke();
   ctx.restore();
 }
