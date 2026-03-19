@@ -64,17 +64,19 @@ body {
   }
   #game-shell {
     /*
-      Fit 16:9 inside safe area, leave breathing room:
-      - Height: 92% of available viewport to avoid browser chrome clipping
-      - Width: derived from height to maintain 16:9 ratio
-      - Also cap by safe-area-aware width (minus notch insets)
+      Fit 20:9 (1600×720) inside safe area with breathing room.
+      Height-first: 92% viewport height, derive width at 20:9.
+      Width-first fallback: safe-area width, derive height at 20:9.
     */
-    height: min(92dvh, 92vh);
+    height: min(
+      92dvh, 92vh,
+      calc((100dvw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)) * 9 / 20)
+    );
     width: min(
-      calc(min(92dvh, 92vh) * 16 / 9),
+      calc(min(92dvh, 92vh) * 20 / 9),
       calc(100dvw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px))
     );
-    aspect-ratio: 16 / 9;
+    aspect-ratio: 20 / 9;
     border-radius: 8px;
     box-shadow: none;
   }
