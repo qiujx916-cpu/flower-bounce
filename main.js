@@ -421,19 +421,19 @@ class Character {
         // Find the other character
         const other = chars[1 - this.id];
 
-        // When the other character is sitting, strongly prefer landing on the empty end
-        // Only force same-end miss if character lands very far on the occupied side
-        // (past 70% of the seesaw half toward the sitting character)
+        // When the other character is sitting:
+        // - Land on empty end ONLY if character is on that side (or near center)
+        // - Miss if character clearly lands on the occupied side
         if (other.state === 'sitting') {
           const emptyEnd = other.sittingEnd === 'left' ? 'right' : 'left';
-          const occupiedDir = other.sittingEnd === 'left' ? -1 : 1; // -1 for left, 1 for right
-          const dxInOccupiedDir = dx * occupiedDir; // positive = toward occupied end
+          const emptyDir = emptyEnd === 'left' ? -1 : 1;
+          const dxTowardEmpty = dx * emptyDir; // positive = toward empty end
 
-          if (dxInOccupiedDir < seesaw.w * 0.35) {
-            // Character is in center zone or toward empty side → land on empty end
+          if (dxTowardEmpty >= -seesaw.w * 0.08) {
+            // Character is on empty side or very close to center → land on empty end
             landEnd = emptyEnd;
           } else {
-            // Character is deep into the occupied side → same-end miss
+            // Character is clearly on the occupied side → fall through
             this.vy = Math.max(this.vy, 3);
             playMissSound();
             this._sameEndMiss = true;
