@@ -86,6 +86,7 @@ let combo = 0;
 let comboTimer = 0;
 let comboPopups = [];  // {x, y, combo, t}
 let bestCombo = 0;
+let bounceCount = 0; // chain eat disabled for first 5 bounces
 
 // Countdown state
 let countdownNum = 0;      // 3, 2, 1 then 0 = GO
@@ -391,8 +392,7 @@ class Character {
   }
 
   launchFromSeesaw(landingDx) {
-    // landingDx: how far from seesaw center the OTHER character landed (-1 to 1 normalized)
-    // This affects the bounce angle of THIS character
+    bounceCount++;
     const bounceBoost = 1 + CONFIG.BOUNCE_SPEED_SCALE * (speedMultiplier - 1);
     const hw = seesaw.w / 2;
 
@@ -597,9 +597,9 @@ class Character {
       playEatSound();
 
       // --- Chain-eat trigger ---
-      // Conditions: 1) moving UP  2) NOT the bottom row (bottom row has nothing below to block falling)
+      // Conditions: 0) at least 5 bounces played  1) moving UP  2) NOT the bottom row
       // 3) came up through a gap in the row below  4) the row below HAS flowers nearby that block falling back
-      if (this.vy < 0 && ri < flowerRows.length - 1) {
+      if (bounceCount > 5 && this.vy < 0 && ri < flowerRows.length - 1) {
         const lowerRow = flowerRows[ri + 1]; // row below current
         // Character rose through a gap in the lower row to reach this row
         const cameFromGap = !lowerRow.hasFlowerNearX(this.x);
@@ -1636,6 +1636,7 @@ function gameOver() {
 function startCountdown() {
   // Reset game data immediately so the scene renders during countdown
   score = 0;
+  bounceCount = 0;
   speedMultiplier = CONFIG.SPEED_INITIAL;
   speedTimer = 0;
   speedHoldTimer = 0;
