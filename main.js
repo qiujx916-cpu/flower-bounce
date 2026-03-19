@@ -188,7 +188,59 @@ function stopBGM() {
   if (bgmInterval) { clearInterval(bgmInterval); bgmInterval = null; }
 }
 
-// --- Leaderboard ---
+// --- Supabase Online Leaderboard ---
+const SUPABASE_URL = 'https://agpnyrstzndyjmhfjcac.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_TFePA_YX31tKgjTiBzyuBg_SJgTpTs6';
+let sbClient = null;
+try {
+  if (window.supabase && window.supabase.createClient) {
+    sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  }
+} catch (e) { console.warn('Supabase init failed:', e); }
+
+// Cached online scores
+let onlineScores = [];      // [{name, score, platform, created_at}]
+let onlineScoresLoading = false;
+let onlineScoresLoaded = false;
+let playerName = localStorage.getItem('flowerBounce_name') || '';
+let showNameInput = false;   // show name input on game over
+let nameInputText = '';
+let nameInputCursor = 0;     // blink timer
+
+// Fetch top scores from Supabase
+async function fetchOnlineScores() {
+  if (!sbClient) return;
+  onlineScoresLoading = true;
+  try {
+    const { data, error } = await sbClient
+      .from('scores')
+      .select('name, score, platform, created_at')
+      .order('score', { ascending: false })
+      .limit(50);
+    if (!error && data) {
+      onlineScores = data;
+      onlineScoresLoaded = true;
+    }
+  } catch (e) { console.warn('Fetch scores failed:', e); }
+  onlineScoresLoading = false;
+}
+
+// Submit score to Supabase
+async function submitOnlineScore(name, scoreVal) {
+  if (!sbClient) return;
+  const platform = isMobile ? 'mobile' : 'desktop';
+  try {
+    await sbClient.from('scores').insert({
+      name: name || '匿名',
+      score: scoreVal,
+      platform
+    });
+    // Refresh leaderboard after submit
+    fetchOnlineScores();
+  } catch (e) { console.warn('Submit score failed:', e); }
+}
+
+// Local fallback (also keep local top 3)
 function getTopScores() {
   try {
     const data = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY));
@@ -1214,17 +1266,15 @@ function isTouchInSwapBtn(gx, gy) {
   return dx * dx + dy * dy <= hitR * hitR;
 }
 
-// --- Leaderboard Panel ---
+// --- Leaderboard Panel (Online) ---
 function drawLeaderboardPanel(ctx) {
   if (!showLeaderboard) return;
-  // Overlay
   ctx.fillStyle = 'rgba(0,0,0,0.35)';
   ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
 
-  const pw = 340, ph = 300;
+  const pw = 440, ph = 480;
   const px = (CONFIG.WIDTH - pw) / 2, py = (CONFIG.HEIGHT - ph) / 2;
 
-  // Panel bg
   ctx.fillStyle = '#fff';
   roundRect(ctx, px, py, pw, ph, 20);
   ctx.fill();
@@ -1233,26 +1283,46 @@ function drawLeaderboardPanel(ctx) {
   roundRect(ctx, px, py, pw, ph, 20);
   ctx.stroke();
 
-  // Title
   ctx.fillStyle = '#e91e63';
-  ctx.font = 'bold 28px "Segoe UI", sans-serif';
+  ctx.font = 'bold 26px "Segoe UI", sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('\u{1F3C6} Top Scores', CONFIG.WIDTH / 2, py + 48);
+  ctx.fillText('\u{1F3C6} 排行榜', CONFIG.WIDTH / 2, py + 44);
 
-  // Scores
-  const scores = getTopScores();
   const medals = ['\u{1F947}', '\u{1F948}', '\u{1F949}'];
-  ctx.font = '24px "Segoe UI", sans-serif';
-  ctx.fillStyle = '#333';
-  for (let i = 0; i < 3; i++) {
-    const s = scores[i] !== undefined ? scores[i] : '-';
-    ctx.fillText(`${medals[i]}  ${s}`, CONFIG.WIDTH / 2, py + 100 + i * 50);
+  const listTop = py + 60;
+  const rowH = 30;
+
+  if (onlineScoresLoading && !onlineScoresLoaded) {
+    ctx.fillStyle = '#999';
+    ctx.font = '20px "Segoe UI", sans-serif';
+    ctx.fillText('加载中...', CONFIG.WIDTH / 2, listTop + 60);
+  } else if (onlineScores.length === 0) {
+    ctx.fillStyle = '#999';
+    ctx.font = '20px "Segoe UI", sans-serif';
+    ctx.fillText('暂无记录', CONFIG.WIDTH / 2, listTop + 60);
+  } else {
+    const show = Math.min(onlineScores.length, 12);
+    for (let i = 0; i < show; i++) {
+      const entry = onlineScores[i];
+      const rank = i < 3 ? medals[i] : `${i + 1}.`;
+      const name = (entry.name || '匿名').slice(0, 8);
+      const platformTag = entry.platform === 'mobile' ? '📱' : '💻';
+      const y = listTop + i * rowH + 18;
+
+      ctx.fillStyle = '#555';
+      ctx.font = '19px "Segoe UI", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(rank, CONFIG.WIDTH / 2 - 170, y);
+      ctx.fillText(name, CONFIG.WIDTH / 2 - 115, y);
+      ctx.textAlign = 'right';
+      ctx.fillText(`${entry.score}  ${platformTag}`, CONFIG.WIDTH / 2 + 170, y);
+    }
   }
 
-  // Close hint
+  ctx.textAlign = 'center';
   ctx.fillStyle = '#999';
-  ctx.font = '16px "Segoe UI", sans-serif';
-  ctx.fillText('Click anywhere to close', CONFIG.WIDTH / 2, py + ph - 24);
+  ctx.font = '15px "Segoe UI", sans-serif';
+  ctx.fillText('点击任意位置关闭', CONFIG.WIDTH / 2, py + ph - 20);
 }
 
 // --- Menu Screen ---
@@ -1324,7 +1394,80 @@ function drawGameOver(ctx) {
   ctx.fillStyle = 'rgba(0,0,0,0.4)';
   ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
 
-  const pw = 380, ph = 380;
+  nameInputCursor += 1;
+
+  // --- Name Input Phase ---
+  if (showNameInput) {
+    const pw = 420, ph = 260;
+    const px = (CONFIG.WIDTH - pw) / 2, py = (CONFIG.HEIGHT - ph) / 2;
+
+    ctx.fillStyle = '#fff';
+    roundRect(ctx, px, py, pw, ph, 22);
+    ctx.fill();
+    ctx.strokeStyle = '#e91e63';
+    ctx.lineWidth = 3;
+    roundRect(ctx, px, py, pw, ph, 22);
+    ctx.stroke();
+
+    ctx.fillStyle = '#d32f2f';
+    ctx.font = 'bold 34px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Game Over', CONFIG.WIDTH / 2, py + 50);
+
+    ctx.fillStyle = '#333';
+    ctx.font = 'bold 26px "Segoe UI", sans-serif';
+    ctx.fillText('Score: ' + score, CONFIG.WIDTH / 2, py + 90);
+
+    // Name label
+    ctx.fillStyle = '#888';
+    ctx.font = '18px "Segoe UI", sans-serif';
+    ctx.fillText('输入昵称提交排行榜', CONFIG.WIDTH / 2, py + 125);
+
+    // Name input box
+    const ibw = 280, ibh = 44;
+    const ibx = (CONFIG.WIDTH - ibw) / 2, iby = py + 138;
+    ctx.fillStyle = '#f5f5f5';
+    roundRect(ctx, ibx, iby, ibw, ibh, 10);
+    ctx.fill();
+    ctx.strokeStyle = '#ccc';
+    ctx.lineWidth = 2;
+    roundRect(ctx, ibx, iby, ibw, ibh, 10);
+    ctx.stroke();
+
+    // Name text + cursor
+    ctx.fillStyle = nameInputText ? '#333' : '#bbb';
+    ctx.font = '22px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    const displayText = nameInputText || '点击输入昵称...';
+    const cursorBlink = Math.floor(nameInputCursor / 30) % 2 === 0;
+    ctx.fillText(displayText + (nameInputText && cursorBlink ? '|' : ''), CONFIG.WIDTH / 2, iby + 30);
+
+    // Submit button
+    const sbw = 160, sbh = 44;
+    const sbx = (CONFIG.WIDTH - sbw) / 2 - 90, sby = py + ph - 62;
+    const submitHover = isInsideButton(sbx, sby, sbw, sbh);
+    ctx.fillStyle = submitHover ? '#c2185b' : '#e91e63';
+    roundRect(ctx, sbx, sby, sbw, sbh, 22);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 20px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('提交分数', sbx + sbw / 2, sby + 30);
+
+    // Skip button
+    const skbx = sbx + sbw + 20, skby = sby;
+    const skipHover = isInsideButton(skbx, skby, sbw, sbh);
+    ctx.fillStyle = skipHover ? '#888' : '#aaa';
+    roundRect(ctx, skbx, skby, sbw, sbh, 22);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.fillText('跳过', skbx + sbw / 2, skby + 30);
+
+    return; // don't draw the normal game over below
+  }
+
+  // --- Normal Game Over with Online Leaderboard ---
+  const pw = 420, ph = 500;
   const px = (CONFIG.WIDTH - pw) / 2, py = (CONFIG.HEIGHT - ph) / 2;
 
   ctx.fillStyle = '#fff';
@@ -1336,31 +1479,58 @@ function drawGameOver(ctx) {
   ctx.stroke();
 
   ctx.fillStyle = '#d32f2f';
-  ctx.font = 'bold 38px "Segoe UI", sans-serif';
+  ctx.font = 'bold 34px "Segoe UI", sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('Game Over', CONFIG.WIDTH / 2, py + 55);
+  ctx.fillText('Game Over', CONFIG.WIDTH / 2, py + 48);
 
   ctx.fillStyle = '#333';
-  ctx.font = 'bold 28px "Segoe UI", sans-serif';
-  ctx.fillText('Score: ' + score, CONFIG.WIDTH / 2, py + 100);
+  ctx.font = 'bold 26px "Segoe UI", sans-serif';
+  ctx.fillText('Score: ' + score, CONFIG.WIDTH / 2, py + 85);
 
-  // Top 3
+  // Online Leaderboard Title
   ctx.fillStyle = '#e91e63';
-  ctx.font = 'bold 22px "Segoe UI", sans-serif';
-  ctx.fillText('Top 3', CONFIG.WIDTH / 2, py + 135);
+  ctx.font = 'bold 20px "Segoe UI", sans-serif';
+  ctx.fillText('\u{1F3C6} 排行榜 Top 10', CONFIG.WIDTH / 2, py + 118);
 
-  const scores = getTopScores();
+  // Online scores list
   const medals = ['\u{1F947}', '\u{1F948}', '\u{1F949}'];
-  ctx.font = '22px "Segoe UI", sans-serif';
-  ctx.fillStyle = '#555';
-  for (let i = 0; i < 3; i++) {
-    const s = scores[i] !== undefined ? scores[i] : '-';
-    ctx.fillText(`${medals[i]}  ${s}`, CONFIG.WIDTH / 2, py + 168 + i * 36);
+  ctx.font = '18px "Segoe UI", sans-serif';
+  const listTop = py + 135;
+  const rowH = 28;
+
+  if (onlineScoresLoading && !onlineScoresLoaded) {
+    ctx.fillStyle = '#999';
+    ctx.fillText('加载中...', CONFIG.WIDTH / 2, listTop + 30);
+  } else if (onlineScores.length === 0) {
+    ctx.fillStyle = '#999';
+    ctx.fillText('暂无记录', CONFIG.WIDTH / 2, listTop + 30);
+  } else {
+    const show = Math.min(onlineScores.length, 10);
+    for (let i = 0; i < show; i++) {
+      const entry = onlineScores[i];
+      const rank = i < 3 ? medals[i] : `${i + 1}.`;
+      const name = (entry.name || '匿名').slice(0, 8);
+      const platformTag = entry.platform === 'mobile' ? '📱' : '💻';
+      const y = listTop + i * rowH + 14;
+
+      // Highlight current score
+      const isMe = entry.score === score && entry.name === (playerName || '匿名');
+      ctx.fillStyle = isMe ? '#e91e63' : '#555';
+      ctx.font = isMe ? 'bold 18px "Segoe UI", sans-serif' : '18px "Segoe UI", sans-serif';
+
+      ctx.textAlign = 'left';
+      ctx.fillText(`${rank}`, CONFIG.WIDTH / 2 - 160, y);
+      ctx.fillText(`${name}`, CONFIG.WIDTH / 2 - 110, y);
+      ctx.textAlign = 'right';
+      ctx.fillText(`${entry.score}  ${platformTag}`, CONFIG.WIDTH / 2 + 160, y);
+    }
   }
+
+  ctx.textAlign = 'center';
 
   // Play Again button
   const bw = 200, bh = 50;
-  const bx = (CONFIG.WIDTH - bw) / 2, by = py + ph - 72;
+  const bx = (CONFIG.WIDTH - bw) / 2, by = py + ph - 68;
   const hovered = isInsideButton(bx, by, bw, bh);
   ctx.fillStyle = hovered ? '#c2185b' : '#e91e63';
   roundRect(ctx, bx, by, bw, bh, 25);
@@ -1372,13 +1542,19 @@ function drawGameOver(ctx) {
 
 // --- Game Over Logic ---
 function gameOver() {
-  if (gameOverTriggered) return; // prevent double trigger from two chars
+  if (gameOverTriggered) return;
   gameOverTriggered = true;
   gameState = 'gameover';
   paused = false;
   stopBGM();
   saveScore(score);
   screenShake = 8;
+  // Show name input for online submission
+  showNameInput = true;
+  nameInputText = playerName || '';
+  nameInputCursor = 0;
+  // Fetch latest leaderboard
+  fetchOnlineScores();
 }
 
 // --- Countdown ---
@@ -1762,7 +1938,7 @@ function handleGameClick(gx, gy) {
     // Leaderboard icon
     if (gx >= CONFIG.WIDTH / 2 + 130 && gx <= CONFIG.WIDTH / 2 + 178 && gy >= 328 && gy <= 376) {
       playClickSound();
-      showLeaderboard = true;
+      showLeaderboard = true; fetchOnlineScores();
       return;
     }
     // Mute icon
@@ -1783,7 +1959,7 @@ function handleGameClick(gx, gy) {
     // Leaderboard icon (top right)
     if (gx >= CONFIG.WIDTH - 100 && gx <= CONFIG.WIDTH - 60 && gy >= 16 && gy <= 56) {
       playClickSound();
-      showLeaderboard = true;
+      showLeaderboard = true; fetchOnlineScores();
       return;
     }
     // Mute icon
@@ -1801,11 +1977,49 @@ function handleGameClick(gx, gy) {
   }
 
   if (gameState === 'gameover') {
-    // Play Again button
-    const pw = 380, ph = 380;
+    if (showNameInput) {
+      // Name input phase
+      const pw = 420, ph = 260;
+      const py = (CONFIG.HEIGHT - ph) / 2;
+
+      // Name input box — trigger prompt
+      const ibw = 280, ibh = 44;
+      const ibx = (CONFIG.WIDTH - ibw) / 2, iby = py + 138;
+      if (gx >= ibx && gx <= ibx + ibw && gy >= iby && gy <= iby + ibh) {
+        const input = prompt('输入你的昵称（最多8个字）:', nameInputText);
+        if (input !== null) {
+          nameInputText = input.slice(0, 8);
+        }
+        return;
+      }
+
+      // Submit button
+      const sbw = 160, sbh = 44;
+      const sbx = (CONFIG.WIDTH - sbw) / 2 - 90, sby = py + ph - 62;
+      if (gx >= sbx && gx <= sbx + sbw && gy >= sby && gy <= sby + sbh) {
+        playerName = nameInputText || '匿名';
+        localStorage.setItem('flowerBounce_name', playerName);
+        submitOnlineScore(playerName, score);
+        showNameInput = false;
+        playClickSound();
+        return;
+      }
+
+      // Skip button
+      const skbx = sbx + sbw + 20, skby = sby;
+      if (gx >= skbx && gx <= skbx + sbw && gy >= skby && gy <= skby + sbh) {
+        showNameInput = false;
+        playClickSound();
+        return;
+      }
+      return;
+    }
+
+    // Normal game over — Play Again button
+    const pw = 420, ph = 500;
     const py = (CONFIG.HEIGHT - ph) / 2;
     const bw = 200, bh = 50;
-    const bx = (CONFIG.WIDTH - bw) / 2, by = py + ph - 72;
+    const bx = (CONFIG.WIDTH - bw) / 2, by = py + ph - 68;
     if (gx >= bx && gx <= bx + bw && gy >= by && gy <= by + bh) {
       playClickSound();
       startGame();
@@ -1932,7 +2146,7 @@ function onTouchEnd(e) {
         paused = true; playClickSound(); return;
       }
       if (gx >= CONFIG.WIDTH - 100 && gx <= CONFIG.WIDTH - 60 && gy >= 16 && gy <= 56) {
-        playClickSound(); showLeaderboard = true; return;
+        playClickSound(); showLeaderboard = true; fetchOnlineScores(); return;
       }
       if (gx >= CONFIG.WIDTH - 52 && gx <= CONFIG.WIDTH - 12 && gy >= 16 && gy <= 56) {
         muted = !muted; if (muted) stopBGM(); else startBGM(); playClickSound(); return;
