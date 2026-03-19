@@ -57,7 +57,7 @@ const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
 // Apply mobile overrides: wider seesaw, lower position, more bottom space
 if (isMobile) {
   CONFIG.SEESAW_WIDTH = 260;
-  CONFIG.SEESAW_Y = 590;
+  CONFIG.SEESAW_Y = 560;
   CONFIG.SPEED_INITIAL = 0.75;
   CONFIG.FLOWER_ROWS = 3;
   CONFIG.FLOWER_SPEEDS = [1.2, -0.9, 1.1];
@@ -1156,7 +1156,7 @@ const SWAP_BTN = { cx: 85, cy: 390, radius: 72 };
 
 function drawMobileSwapButton(ctx) {
   const b = SWAP_BTN;
-  const canUse = gameState === 'playing' && !paused;
+  const canUse = (gameState === 'playing' || gameState === 'countdown') && !paused;
 
   // Dimmer when not usable, brighter when pressed
   const alpha = _swapBtnPressed ? 0.4 : (canUse ? 0.18 : 0.1);
@@ -1190,6 +1190,15 @@ function drawMobileSwapButton(ctx) {
   ctx.moveTo(19, 3); ctx.lineTo(26, 11); ctx.lineTo(19, 19);
   ctx.stroke();
   ctx.restore();
+
+  // Flashing hint text during countdown
+  if (gameState === 'countdown') {
+    const blink = Math.sin(Date.now() * 0.006) * 0.5 + 0.5; // 0~1 oscillation
+    ctx.fillStyle = `rgba(233,30,99,${blink * 0.7})`;
+    ctx.font = 'bold 13px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('点击切换方向', b.cx, b.cy + b.radius + 20);
+  }
 }
 
 let _swapBtnPressed = false;
@@ -1854,8 +1863,8 @@ function onTouchStart(e) {
     const t = e.changedTouches[i];
     const pos = canvasToGame(t.clientX, t.clientY);
 
-    // Check if this touch lands on the swap button
-    if (isMobile && gameState === 'playing' && !paused && isTouchInSwapBtn(pos.x, pos.y)) {
+    // Check if this touch lands on the swap button (works during playing and countdown)
+    if (isMobile && (gameState === 'playing' || gameState === 'countdown') && !paused && isTouchInSwapBtn(pos.x, pos.y)) {
       _swapTouchId = t.identifier;
       _swapBtnPressed = true;
       switchCharPositions();
