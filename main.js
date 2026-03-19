@@ -57,7 +57,8 @@ const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
 // Apply mobile overrides: wider seesaw, lower position, more bottom space
 if (isMobile) {
   CONFIG.SEESAW_WIDTH = 260;
-  CONFIG.SEESAW_Y = 560;
+  CONFIG.SEESAW_Y = 520;
+  CONFIG.GROUND_TOP = CONFIG.HEIGHT - 80; // raise ground UI
   CONFIG.SPEED_INITIAL = 0.75;
   CONFIG.FLOWER_ROWS = 3;
   CONFIG.FLOWER_SPEEDS = [1.2, -0.9, 1.1];
@@ -1582,17 +1583,19 @@ function gameLoop(timestamp) {
   }
 
   // Ground
+  const groundTop = CONFIG.GROUND_TOP || (CONFIG.HEIGHT - 40);
+  const groundH = CONFIG.HEIGHT - groundTop;
   ctx.fillStyle = '#81c784';
-  ctx.fillRect(0, CONFIG.HEIGHT - 40, CONFIG.WIDTH, 40);
+  ctx.fillRect(0, groundTop, CONFIG.WIDTH, groundH);
   ctx.fillStyle = '#66bb6a';
-  ctx.fillRect(0, CONFIG.HEIGHT - 40, CONFIG.WIDTH, 4);
+  ctx.fillRect(0, groundTop, CONFIG.WIDTH, 4);
   // Grass blades
   ctx.strokeStyle = '#4caf50';
   ctx.lineWidth = 2;
   ctx.lineCap = 'round';
   for (let i = 0; i < 60; i++) {
     const gx = (i * 22 + 5) % CONFIG.WIDTH;
-    const gy = CONFIG.HEIGHT - 40;
+    const gy = groundTop;
     const sway = Math.sin(animFrame * 0.02 + i * 0.7) * 3;
     ctx.beginPath();
     ctx.moveTo(gx, gy);
@@ -1602,7 +1605,7 @@ function gameLoop(timestamp) {
   // Small ground flowers
   for (let i = 0; i < 8; i++) {
     const gfx = (i * 167 + 40) % CONFIG.WIDTH;
-    const gfy = CONFIG.HEIGHT - 32 + (i % 2) * 4;
+    const gfy = groundTop + 8 + (i % 2) * 4;
     const colors = ['#fff176', '#ef9a9a', '#b39ddb', '#80deea'];
     ctx.fillStyle = colors[i % colors.length];
     ctx.beginPath();
