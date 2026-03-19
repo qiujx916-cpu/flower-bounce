@@ -55,17 +55,31 @@ body {
   body {
     background: #1a1a2e;
     cursor: auto;
+    /* Respect safe areas for notch/dynamic island */
+    padding:
+      env(safe-area-inset-top, 0px)
+      env(safe-area-inset-right, 0px)
+      env(safe-area-inset-bottom, 0px)
+      env(safe-area-inset-left, 0px);
   }
   #game-shell {
-    /* Fit 16:9 inside full screen with letterbox — no distortion */
-    width: min(100vw, calc(100vh * 16 / 9));
-    width: min(100dvw, calc(100dvh * 16 / 9));
+    /*
+      Fit 16:9 inside safe area, leave breathing room:
+      - Height: 92% of available viewport to avoid browser chrome clipping
+      - Width: derived from height to maintain 16:9 ratio
+      - Also cap by safe-area-aware width (minus notch insets)
+    */
+    height: min(92dvh, 92vh);
+    width: min(
+      calc(min(92dvh, 92vh) * 16 / 9),
+      calc(100dvw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px))
+    );
     aspect-ratio: 16 / 9;
-    border-radius: 0;
+    border-radius: 8px;
     box-shadow: none;
   }
   #game-canvas {
-    border-radius: 0;
+    border-radius: 8px;
   }
 }
 
