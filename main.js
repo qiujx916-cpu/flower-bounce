@@ -50,6 +50,16 @@ const CONFIG = {
   STORAGE_KEY: 'flowerBounce_topScores',
 };
 
+// --- Mobile Detection ---
+const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
+  ('ontouchstart' in window && window.innerWidth < 1024);
+
+// Apply mobile overrides: wider seesaw, lower position, more bottom space
+if (isMobile) {
+  CONFIG.SEESAW_WIDTH = 260;
+  CONFIG.SEESAW_Y = 590;
+}
+
 // --- Global State ---
 let canvas, ctx;
 let scaleX, scaleY, offsetX, offsetY;
@@ -1114,7 +1124,13 @@ function drawHUD(ctx) {
   ctx.textAlign = 'left';
   ctx.fillText('Score: ' + score, 32, 40);
 
-  // (Combo indicator and Speed display removed per user request)
+  // Mobile: double-tap swap hint (show for first 5 seconds)
+  if (isMobile && animFrame < 300) {
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.font = '16px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('双击切换位置', CONFIG.WIDTH / 2, CONFIG.HEIGHT - 18);
+  }
 
   // Pause button
   drawIconButton(ctx, CONFIG.WIDTH - 148, 16, 36, paused ? '\u25B6' : '\u23F8');
@@ -1622,7 +1638,7 @@ function gameLoop(timestamp) {
     ctx.fillText('PAUSED', CONFIG.WIDTH / 2, CONFIG.HEIGHT / 2 - 20);
     ctx.font = '22px "Segoe UI", sans-serif';
     ctx.fillStyle = '#ddd';
-    ctx.fillText('Click pause or press P to resume', CONFIG.WIDTH / 2, CONFIG.HEIGHT / 2 + 25);
+    ctx.fillText(isMobile ? '点击任意位置继续' : 'Click pause or press P to resume', CONFIG.WIDTH / 2, CONFIG.HEIGHT / 2 + 25);
     ctx.textBaseline = 'alphabetic';
   }
 
@@ -1740,6 +1756,10 @@ function onClick(e) {
 let _lastTouchX = CONFIG.WIDTH / 2;
 let _lastTouchY = CONFIG.HEIGHT / 2;
 let _touchActive = false;
+let _touchStartPos = null;  // track start position to distinguish tap vs drag
+let _lastTapTime = 0;       // for double-tap detection on mobile
+const DOUBLE_TAP_MS = 350;  // max interval between taps for double-tap
+const TAP_MOVE_THRESHOLD = 15; // max movement (in game coords) to count as a tap
 
 function onTouchMove(e) {
   e.preventDefault();
@@ -1765,14 +1785,56 @@ function onTouchStart(e) {
     _lastTouchX = pos.x;
     _lastTouchY = pos.y;
     _touchActive = true;
-    handleGameClick(pos.x, pos.y);
+    _touchStartPos = { x: pos.x, y: pos.y };
   }
 }
 
 function onTouchEnd(e) {
   e.preventDefault();
-  // Keep last known position for seesaw (don't reset mouseX)
   _touchActive = false;
+  if (!_touchStartPos) return;
+
+  // Check if this was a tap (not a drag)
+  const endX = _lastTouchX, endY = _lastTouchY;
+  const dx = Math.abs(endX - _touchStartPos.x);
+  const dy = Math.abs(endY - _touchStartPos.y);
+  const isTap = dx < TAP_MOVE_THRESHOLD && dy < TAP_MOVE_THRESHOLD;
+  _touchStartPos = null;
+
+  if (!isTap) return; // drag — ignore as click
+
+  const now = Date.now();
+
+  if (gameState === 'playing' && paused) {
+    // Tap anywhere to unpause on mobile
+    paused = false;
+    playClickSound();
+    return;
+  }
+
+  if (gameState === 'playing' && !paused) {
+    // In gameplay: check if tapping UI buttons (always single tap)
+    const gx = endX, gy = endY;
+    if (gx >= CONFIG.WIDTH - 148 && gx <= CONFIG.WIDTH - 108 && gy >= 16 && gy <= 56) {
+      paused = true; playClickSound(); return;
+    }
+    if (gx >= CONFIG.WIDTH - 100 && gx <= CONFIG.WIDTH - 60 && gy >= 16 && gy <= 56) {
+      playClickSound(); showLeaderboard = true; return;
+    }
+    if (gx >= CONFIG.WIDTH - 52 && gx <= CONFIG.WIDTH - 12 && gy >= 16 && gy <= 56) {
+      muted = !muted; if (muted) stopBGM(); else startBGM(); playClickSound(); return;
+    }
+    // Double-tap to swap character position (prevents accidental swap)
+    if (now - _lastTapTime < DOUBLE_TAP_MS) {
+      switchCharPositions();
+      _lastTapTime = 0; // reset so triple-tap doesn't re-trigger
+    } else {
+      _lastTapTime = now;
+    }
+  } else {
+    // Non-gameplay states: single tap works as click (menu, pause, gameover)
+    handleGameClick(endX, endY);
+  }
 }
 
 // --- Keyboard Support ---
