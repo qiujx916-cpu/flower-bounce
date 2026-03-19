@@ -1553,6 +1553,7 @@ function gameOver() {
   showNameInput = true;
   nameInputText = playerName || '';
   nameInputCursor = 0;
+  if (_nameInputEl) _nameInputEl.value = nameInputText;
   // Fetch latest leaderboard
   fetchOnlineScores();
 }
@@ -1982,14 +1983,11 @@ function handleGameClick(gx, gy) {
       const pw = 420, ph = 260;
       const py = (CONFIG.HEIGHT - ph) / 2;
 
-      // Name input box — trigger prompt
+      // Name input box — focus hidden HTML input
       const ibw = 280, ibh = 44;
       const ibx = (CONFIG.WIDTH - ibw) / 2, iby = py + 138;
       if (gx >= ibx && gx <= ibx + ibw && gy >= iby && gy <= iby + ibh) {
-        const input = prompt('输入你的昵称（最多8个字）:', nameInputText);
-        if (input !== null) {
-          nameInputText = input.slice(0, 8);
-        }
+        focusNameInput();
         return;
       }
 
@@ -2001,6 +1999,7 @@ function handleGameClick(gx, gy) {
         localStorage.setItem('flowerBounce_name', playerName);
         submitOnlineScore(playerName, score);
         showNameInput = false;
+        blurNameInput();
         playClickSound();
         return;
       }
@@ -2009,6 +2008,7 @@ function handleGameClick(gx, gy) {
       const skbx = sbx + sbw + 20, skby = sby;
       if (gx >= skbx && gx <= skbx + sbw && gy >= skby && gy <= skby + sbh) {
         showNameInput = false;
+        blurNameInput();
         playClickSound();
         return;
       }
@@ -2198,11 +2198,45 @@ function onKeyDown(e) {
 }
 
 // --- Init ---
+// --- Name Input via hidden HTML element ---
+let _nameInputEl = null;
+
+function initNameInput() {
+  _nameInputEl = document.getElementById('name-input');
+  if (!_nameInputEl) return;
+  _nameInputEl.value = nameInputText;
+  _nameInputEl.addEventListener('input', () => {
+    nameInputText = (_nameInputEl.value || '').slice(0, 8);
+  });
+  // On blur, sync value back
+  _nameInputEl.addEventListener('blur', () => {
+    nameInputText = (_nameInputEl.value || '').slice(0, 8);
+  });
+}
+
+function focusNameInput() {
+  if (!_nameInputEl) return;
+  _nameInputEl.value = nameInputText;
+  _nameInputEl.style.left = '50%';
+  _nameInputEl.style.opacity = '0';
+  _nameInputEl.style.pointerEvents = 'auto';
+  _nameInputEl.focus();
+  // On mobile, font-size >= 16px prevents auto-zoom
+}
+
+function blurNameInput() {
+  if (!_nameInputEl) return;
+  _nameInputEl.blur();
+  _nameInputEl.style.left = '-9999px';
+  _nameInputEl.style.pointerEvents = 'none';
+}
+
 function init() {
   canvas = document.getElementById('game-canvas');
   ctx = canvas.getContext('2d');
   canvas.width = CONFIG.WIDTH;
   canvas.height = CONFIG.HEIGHT;
+  initNameInput();
 
   // Mouse
   canvas.addEventListener('mousemove', onMouseMove);
