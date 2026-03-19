@@ -1124,12 +1124,9 @@ function drawHUD(ctx) {
   ctx.textAlign = 'left';
   ctx.fillText('Score: ' + score, 32, 40);
 
-  // Mobile: double-tap swap hint (show for first 5 seconds)
-  if (isMobile && animFrame < 300) {
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.font = '16px "Segoe UI", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('双击切换位置', CONFIG.WIDTH / 2, CONFIG.HEIGHT - 18);
+  // Mobile: draw swap button on left side
+  if (isMobile) {
+    drawMobileSwapButton(ctx);
   }
 
   // Pause button
@@ -1151,6 +1148,63 @@ function drawIconButton(ctx, x, y, size, emoji) {
   ctx.textBaseline = 'middle';
   ctx.fillText(emoji, x + size / 2 + 2, y + size / 2 + 3);
   ctx.textBaseline = 'alphabetic';
+}
+
+// --- Mobile Swap Button ---
+// Constants for the swap button area (left side of screen)
+const SWAP_BTN = { x: 20, y: 540, w: 90, h: 90, r: 18 };
+
+function drawMobileSwapButton(ctx) {
+  if (gameState !== 'playing' || paused) return;
+
+  const b = SWAP_BTN;
+  const cx = b.x + b.w / 2;
+  const cy = b.y + b.h / 2;
+
+  // Pulsing glow when tapped
+  const pulse = _swapBtnPressed ? 0.9 : 0.45;
+
+  // Button bg
+  ctx.fillStyle = `rgba(255,255,255,${pulse})`;
+  roundRect(ctx, b.x, b.y, b.w, b.h, b.r);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(233,30,99,0.5)';
+  ctx.lineWidth = 2;
+  roundRect(ctx, b.x, b.y, b.w, b.h, b.r);
+  ctx.stroke();
+
+  // Swap arrows icon (⇆)
+  ctx.save();
+  ctx.translate(cx, cy - 4);
+  ctx.strokeStyle = '#e91e63';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  // Left arrow
+  ctx.beginPath();
+  ctx.moveTo(12, -8); ctx.lineTo(-12, -8);
+  ctx.moveTo(-8, -13); ctx.lineTo(-12, -8); ctx.lineTo(-8, -3);
+  ctx.stroke();
+  // Right arrow
+  ctx.beginPath();
+  ctx.moveTo(-12, 8); ctx.lineTo(12, 8);
+  ctx.moveTo(8, 3); ctx.lineTo(12, 8); ctx.lineTo(8, 13);
+  ctx.stroke();
+  ctx.restore();
+
+  // Label
+  ctx.fillStyle = 'rgba(233,30,99,0.7)';
+  ctx.font = 'bold 11px "Segoe UI", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('换向', cx, cy + 26);
+}
+
+let _swapBtnPressed = false;
+
+function isTouchInSwapBtn(gx, gy) {
+  const b = SWAP_BTN;
+  // Generous hit area (20px padding on each side)
+  return gx >= b.x - 20 && gx <= b.x + b.w + 20 &&
+         gy >= b.y - 20 && gy <= b.y + b.h + 20;
 }
 
 // --- Leaderboard Panel ---
@@ -1753,32 +1807,61 @@ function onClick(e) {
 }
 
 // --- Touch Support ---
+// Multi-touch: right hand controls seesaw, left hand taps swap button
 let _lastTouchX = CONFIG.WIDTH / 2;
 let _lastTouchY = CONFIG.HEIGHT / 2;
 let _touchActive = false;
-let _touchStartPos = null;  // track start position to distinguish tap vs drag
-let _lastTapTime = 0;       // for double-tap detection on mobile
-const DOUBLE_TAP_MS = 350;  // max interval between taps for double-tap
-const TAP_MOVE_THRESHOLD = 15; // max movement (in game coords) to count as a tap
+let _touchStartPos = null;
+const TAP_MOVE_THRESHOLD = 15;
+
+// Track which touch IDs are controlling seesaw vs swap button
+let _seesawTouchId = null;
+let _swapTouchId = null;
+
+function _findSeesawTouch(touches) {
+  // Find a non-swap-button touch to drive the seesaw
+  for (let i = 0; i < touches.length; i++) {
+    const pos = canvasToGame(touches[i].clientX, touches[i].clientY);
+    if (!isTouchInSwapBtn(pos.x, pos.y)) return touches[i];
+  }
+  return touches[0]; // fallback
+}
 
 function onTouchMove(e) {
   e.preventDefault();
-  if (e.touches.length > 0) {
-    const pos = canvasToGame(e.touches[0].clientX, e.touches[0].clientY);
+  // Update seesaw position from any non-swap-button touch
+  for (let i = 0; i < e.touches.length; i++) {
+    const t = e.touches[i];
+    const pos = canvasToGame(t.clientX, t.clientY);
+    // If this touch started on the swap button, skip it for seesaw control
+    if (t.identifier === _swapTouchId) continue;
     mouseX = pos.x;
     hoverMouseX = pos.x;
     hoverMouseY = pos.y;
     _lastTouchX = pos.x;
     _lastTouchY = pos.y;
     _touchActive = true;
+    break; // use first valid touch for seesaw
   }
 }
 
 function onTouchStart(e) {
   e.preventDefault();
   initAudio();
-  if (e.touches.length > 0) {
-    const pos = canvasToGame(e.touches[0].clientX, e.touches[0].clientY);
+
+  for (let i = 0; i < e.changedTouches.length; i++) {
+    const t = e.changedTouches[i];
+    const pos = canvasToGame(t.clientX, t.clientY);
+
+    // Check if this touch lands on the swap button
+    if (isMobile && gameState === 'playing' && !paused && isTouchInSwapBtn(pos.x, pos.y)) {
+      _swapTouchId = t.identifier;
+      _swapBtnPressed = true;
+      switchCharPositions();
+      continue; // don't move seesaw for this touch
+    }
+
+    // Otherwise this touch controls the seesaw
     mouseX = pos.x;
     hoverMouseX = pos.x;
     hoverMouseY = pos.y;
@@ -1786,54 +1869,65 @@ function onTouchStart(e) {
     _lastTouchY = pos.y;
     _touchActive = true;
     _touchStartPos = { x: pos.x, y: pos.y };
+    _seesawTouchId = t.identifier;
   }
 }
 
 function onTouchEnd(e) {
   e.preventDefault();
-  _touchActive = false;
-  if (!_touchStartPos) return;
 
-  // Check if this was a tap (not a drag)
-  const endX = _lastTouchX, endY = _lastTouchY;
-  const dx = Math.abs(endX - _touchStartPos.x);
-  const dy = Math.abs(endY - _touchStartPos.y);
-  const isTap = dx < TAP_MOVE_THRESHOLD && dy < TAP_MOVE_THRESHOLD;
-  _touchStartPos = null;
+  for (let i = 0; i < e.changedTouches.length; i++) {
+    const t = e.changedTouches[i];
 
-  if (!isTap) return; // drag — ignore as click
+    // Swap button touch released
+    if (t.identifier === _swapTouchId) {
+      _swapTouchId = null;
+      _swapBtnPressed = false;
+      continue;
+    }
 
-  const now = Date.now();
-
-  if (gameState === 'playing' && paused) {
-    // Tap anywhere to unpause on mobile
-    paused = false;
-    playClickSound();
-    return;
+    // Seesaw touch released — check for tap
+    if (t.identifier === _seesawTouchId) {
+      _seesawTouchId = null;
+    }
   }
 
-  if (gameState === 'playing' && !paused) {
-    // In gameplay: check if tapping UI buttons (always single tap)
-    const gx = endX, gy = endY;
-    if (gx >= CONFIG.WIDTH - 148 && gx <= CONFIG.WIDTH - 108 && gy >= 16 && gy <= 56) {
-      paused = true; playClickSound(); return;
+  // If no more touches, check for tap action (menu, gameover, UI buttons)
+  if (e.touches.length === 0) {
+    _touchActive = false;
+    if (!_touchStartPos) return;
+
+    const endX = _lastTouchX, endY = _lastTouchY;
+    const dx = Math.abs(endX - _touchStartPos.x);
+    const dy = Math.abs(endY - _touchStartPos.y);
+    const isTap = dx < TAP_MOVE_THRESHOLD && dy < TAP_MOVE_THRESHOLD;
+    _touchStartPos = null;
+
+    if (!isTap) return;
+
+    if (gameState === 'playing' && paused) {
+      paused = false;
+      playClickSound();
+      return;
     }
-    if (gx >= CONFIG.WIDTH - 100 && gx <= CONFIG.WIDTH - 60 && gy >= 16 && gy <= 56) {
-      playClickSound(); showLeaderboard = true; return;
-    }
-    if (gx >= CONFIG.WIDTH - 52 && gx <= CONFIG.WIDTH - 12 && gy >= 16 && gy <= 56) {
-      muted = !muted; if (muted) stopBGM(); else startBGM(); playClickSound(); return;
-    }
-    // Double-tap to swap character position (prevents accidental swap)
-    if (now - _lastTapTime < DOUBLE_TAP_MS) {
-      switchCharPositions();
-      _lastTapTime = 0; // reset so triple-tap doesn't re-trigger
+
+    if (gameState === 'playing' && !paused) {
+      // UI buttons (single tap)
+      const gx = endX, gy = endY;
+      if (gx >= CONFIG.WIDTH - 148 && gx <= CONFIG.WIDTH - 108 && gy >= 16 && gy <= 56) {
+        paused = true; playClickSound(); return;
+      }
+      if (gx >= CONFIG.WIDTH - 100 && gx <= CONFIG.WIDTH - 60 && gy >= 16 && gy <= 56) {
+        playClickSound(); showLeaderboard = true; return;
+      }
+      if (gx >= CONFIG.WIDTH - 52 && gx <= CONFIG.WIDTH - 12 && gy >= 16 && gy <= 56) {
+        muted = !muted; if (muted) stopBGM(); else startBGM(); playClickSound(); return;
+      }
+      // No swap on right-hand tap — swap is handled by the dedicated button
     } else {
-      _lastTapTime = now;
+      // Non-gameplay: menu, gameover etc — single tap works as click
+      handleGameClick(endX, endY);
     }
-  } else {
-    // Non-gameplay states: single tap works as click (menu, pause, gameover)
-    handleGameClick(endX, endY);
   }
 }
 
