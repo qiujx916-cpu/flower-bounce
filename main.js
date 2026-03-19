@@ -58,6 +58,7 @@ const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
 if (isMobile) {
   CONFIG.SEESAW_WIDTH = 260;
   CONFIG.SEESAW_Y = 590;
+  CONFIG.SPEED_INITIAL = 0.75;
 }
 
 // --- Global State ---
