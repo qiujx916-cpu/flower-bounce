@@ -59,6 +59,8 @@ if (isMobile) {
   CONFIG.SEESAW_WIDTH = 260;
   CONFIG.SEESAW_Y = 590;
   CONFIG.SPEED_INITIAL = 0.75;
+  CONFIG.FLOWER_ROWS = 3;
+  CONFIG.FLOWER_SPEEDS = [1.2, -0.9, 1.1];
 }
 
 // --- Global State ---
