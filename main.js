@@ -226,17 +226,35 @@ async function fetchOnlineScores() {
   onlineScoresLoading = false;
 }
 
-// Submit score to Supabase
+// Submit score to Supabase (only keep highest score per name)
 async function submitOnlineScore(name, scoreVal) {
   if (!sbClient) return;
+  const playerNameStr = name || '匿名';
   const platform = isMobile ? 'mobile' : 'desktop';
   try {
-    await sbClient.from('scores').insert({
-      name: name || '匿名',
-      score: scoreVal,
-      platform
-    });
-    // Refresh leaderboard after submit
+    // Check if this player already has a record
+    const { data: existing } = await sbClient
+      .from('scores')
+      .select('id, score')
+      .eq('name', playerNameStr)
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      // Only update if new score is higher
+      if (scoreVal > existing[0].score) {
+        await sbClient
+          .from('scores')
+          .update({ score: scoreVal, platform, created_at: new Date().toISOString() })
+          .eq('id', existing[0].id);
+      }
+    } else {
+      // New player, insert
+      await sbClient.from('scores').insert({
+        name: playerNameStr,
+        score: scoreVal,
+        platform
+      });
+    }
     fetchOnlineScores();
   } catch (e) { console.warn('Submit score failed:', e); }
 }
@@ -1623,12 +1641,16 @@ function gameOver() {
   stopBGM();
   saveScore(score);
   screenShake = 8;
-  // Show name input for online submission
-  showNameInput = true;
-  nameInputText = playerName || '';
-  nameInputCursor = 0;
-  if (_nameInputEl) _nameInputEl.value = nameInputText;
-  // Fetch latest leaderboard
+  // If player already has a name, auto-submit and show leaderboard directly
+  if (playerName) {
+    showNameInput = false;
+    submitOnlineScore(playerName, score);
+  } else {
+    showNameInput = true;
+    nameInputText = '';
+    nameInputCursor = 0;
+    if (_nameInputEl) _nameInputEl.value = '';
+  }
   fetchOnlineScores();
 }
 
