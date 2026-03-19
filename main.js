@@ -1124,10 +1124,7 @@ function drawHUD(ctx) {
   ctx.textAlign = 'left';
   ctx.fillText('Score: ' + score, 32, 40);
 
-  // Mobile: draw swap button on left side
-  if (isMobile) {
-    drawMobileSwapButton(ctx);
-  }
+  // Mobile swap button is drawn in gameLoop (always visible)
 
   // Pause button
   drawIconButton(ctx, CONFIG.WIDTH - 148, 16, 36, paused ? '\u25B6' : '\u23F8');
@@ -1151,60 +1148,56 @@ function drawIconButton(ctx, x, y, size, emoji) {
 }
 
 // --- Mobile Swap Button ---
-// Constants for the swap button area (left side of screen)
-const SWAP_BTN = { x: 20, y: 540, w: 90, h: 90, r: 18 };
+// Circle button, left-center area, always visible on mobile
+const SWAP_BTN = { cx: 65, cy: 400, radius: 40 };
 
 function drawMobileSwapButton(ctx) {
-  if (gameState !== 'playing' || paused) return;
-
   const b = SWAP_BTN;
-  const cx = b.x + b.w / 2;
-  const cy = b.y + b.h / 2;
+  const canUse = gameState === 'playing' && !paused;
 
-  // Pulsing glow when tapped
-  const pulse = _swapBtnPressed ? 0.9 : 0.45;
+  // Dimmer when not usable, brighter when pressed
+  const alpha = _swapBtnPressed ? 0.55 : (canUse ? 0.3 : 0.15);
+  const iconAlpha = _swapBtnPressed ? 0.9 : (canUse ? 0.5 : 0.2);
 
-  // Button bg
-  ctx.fillStyle = `rgba(255,255,255,${pulse})`;
-  roundRect(ctx, b.x, b.y, b.w, b.h, b.r);
+  // Circle bg
+  ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+  ctx.beginPath();
+  ctx.arc(b.cx, b.cy, b.radius, 0, Math.PI * 2);
   ctx.fill();
-  ctx.strokeStyle = 'rgba(233,30,99,0.5)';
+  ctx.strokeStyle = `rgba(233,30,99,${iconAlpha * 0.6})`;
   ctx.lineWidth = 2;
-  roundRect(ctx, b.x, b.y, b.w, b.h, b.r);
+  ctx.beginPath();
+  ctx.arc(b.cx, b.cy, b.radius, 0, Math.PI * 2);
   ctx.stroke();
 
-  // Swap arrows icon (⇆)
+  // Swap arrows icon
   ctx.save();
-  ctx.translate(cx, cy - 4);
-  ctx.strokeStyle = '#e91e63';
-  ctx.lineWidth = 2.5;
+  ctx.translate(b.cx, b.cy);
+  ctx.strokeStyle = `rgba(233,30,99,${iconAlpha})`;
+  ctx.lineWidth = 2.8;
   ctx.lineCap = 'round';
   // Left arrow
   ctx.beginPath();
-  ctx.moveTo(12, -8); ctx.lineTo(-12, -8);
-  ctx.moveTo(-8, -13); ctx.lineTo(-12, -8); ctx.lineTo(-8, -3);
+  ctx.moveTo(14, -7); ctx.lineTo(-14, -7);
+  ctx.moveTo(-9, -13); ctx.lineTo(-14, -7); ctx.lineTo(-9, -1);
   ctx.stroke();
   // Right arrow
   ctx.beginPath();
-  ctx.moveTo(-12, 8); ctx.lineTo(12, 8);
-  ctx.moveTo(8, 3); ctx.lineTo(12, 8); ctx.lineTo(8, 13);
+  ctx.moveTo(-14, 7); ctx.lineTo(14, 7);
+  ctx.moveTo(9, 1); ctx.lineTo(14, 7); ctx.lineTo(9, 13);
   ctx.stroke();
   ctx.restore();
-
-  // Label
-  ctx.fillStyle = 'rgba(233,30,99,0.7)';
-  ctx.font = 'bold 11px "Segoe UI", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('换向', cx, cy + 26);
 }
 
 let _swapBtnPressed = false;
 
 function isTouchInSwapBtn(gx, gy) {
   const b = SWAP_BTN;
-  // Generous hit area (20px padding on each side)
-  return gx >= b.x - 20 && gx <= b.x + b.w + 20 &&
-         gy >= b.y - 20 && gy <= b.y + b.h + 20;
+  const dx = gx - b.cx;
+  const dy = gy - b.cy;
+  // Generous hit area: radius + 20px padding
+  const hitR = b.radius + 20;
+  return dx * dx + dy * dy <= hitR * hitR;
 }
 
 // --- Leaderboard Panel ---
@@ -1707,6 +1700,11 @@ function gameLoop(timestamp) {
   // Draw leaderboard on top if open during game
   if (showLeaderboard && gameState !== 'menu') {
     drawLeaderboardPanel(ctx);
+  }
+
+  // Mobile swap button — always visible on top layer
+  if (isMobile) {
+    drawMobileSwapButton(ctx);
   }
 
   requestAnimationFrame(gameLoop);
