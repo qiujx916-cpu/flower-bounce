@@ -84,20 +84,27 @@ function initAudio() {
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   }
+  // iOS Safari requires resume() after user gesture
+  if (audioCtx && audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
 }
 
 function playTone(freq, duration, type = 'sine', vol = 0.15) {
   if (muted || !audioCtx) return;
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.type = type;
-  osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-  gain.gain.setValueAtTime(vol, audioCtx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
-  osc.connect(gain);
-  gain.connect(audioCtx.destination);
-  osc.start();
-  osc.stop(audioCtx.currentTime + duration);
+  try {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
+  } catch (_) { /* audio not available */ }
 }
 
 function playCatchSound() {
@@ -1730,6 +1737,10 @@ function onClick(e) {
 }
 
 // --- Touch Support ---
+let _lastTouchX = CONFIG.WIDTH / 2;
+let _lastTouchY = CONFIG.HEIGHT / 2;
+let _touchActive = false;
+
 function onTouchMove(e) {
   e.preventDefault();
   if (e.touches.length > 0) {
@@ -1737,6 +1748,9 @@ function onTouchMove(e) {
     mouseX = pos.x;
     hoverMouseX = pos.x;
     hoverMouseY = pos.y;
+    _lastTouchX = pos.x;
+    _lastTouchY = pos.y;
+    _touchActive = true;
   }
 }
 
@@ -1748,8 +1762,17 @@ function onTouchStart(e) {
     mouseX = pos.x;
     hoverMouseX = pos.x;
     hoverMouseY = pos.y;
+    _lastTouchX = pos.x;
+    _lastTouchY = pos.y;
+    _touchActive = true;
     handleGameClick(pos.x, pos.y);
   }
+}
+
+function onTouchEnd(e) {
+  e.preventDefault();
+  // Keep last known position for seesaw (don't reset mouseX)
+  _touchActive = false;
 }
 
 // --- Keyboard Support ---
@@ -1804,15 +1827,37 @@ function init() {
   // Touch
   canvas.addEventListener('touchmove', onTouchMove, { passive: false });
   canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+  canvas.addEventListener('touchend', onTouchEnd, { passive: false });
+  canvas.addEventListener('touchcancel', onTouchEnd, { passive: false });
 
   // Keyboard
   window.addEventListener('keydown', onKeyDown);
 
-  // Prevent context menu
+  // Prevent context menu and other mobile gestures
   canvas.addEventListener('contextmenu', e => e.preventDefault());
+  document.addEventListener('gesturestart', e => e.preventDefault());
+  document.addEventListener('gesturechange', e => e.preventDefault());
+
+  // Handle resize / orientation change
+  window.addEventListener('resize', onResize);
+  onResize();
 
   lastTime = performance.now();
   requestAnimationFrame(gameLoop);
 }
 
-window.addEventListener('DOMContentLoaded', init);
+function onResize() {
+  // Force canvas to re-layout — needed on mobile orientation change
+  if (!canvas) return;
+  // Ensure DPI scaling for sharp rendering on high-DPI mobile screens
+  const rect = canvas.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2); // cap at 2x for performance
+  canvas.width = CONFIG.WIDTH;
+  canvas.height = CONFIG.HEIGHT;
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
