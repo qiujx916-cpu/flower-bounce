@@ -1149,15 +1149,15 @@ function drawIconButton(ctx, x, y, size, emoji) {
 
 // --- Mobile Swap Button ---
 // Circle button, left-center area, always visible on mobile
-const SWAP_BTN = { cx: 75, cy: 400, radius: 55 };
+const SWAP_BTN = { cx: 85, cy: 390, radius: 72 };
 
 function drawMobileSwapButton(ctx) {
   const b = SWAP_BTN;
   const canUse = gameState === 'playing' && !paused;
 
   // Dimmer when not usable, brighter when pressed
-  const alpha = _swapBtnPressed ? 0.55 : (canUse ? 0.3 : 0.15);
-  const iconAlpha = _swapBtnPressed ? 0.9 : (canUse ? 0.5 : 0.2);
+  const alpha = _swapBtnPressed ? 0.4 : (canUse ? 0.18 : 0.1);
+  const iconAlpha = _swapBtnPressed ? 0.7 : (canUse ? 0.3 : 0.12);
 
   // Circle bg
   ctx.fillStyle = `rgba(255,255,255,${alpha})`;
@@ -1174,17 +1174,17 @@ function drawMobileSwapButton(ctx) {
   ctx.save();
   ctx.translate(b.cx, b.cy);
   ctx.strokeStyle = `rgba(233,30,99,${iconAlpha})`;
-  ctx.lineWidth = 3.2;
+  ctx.lineWidth = 3.5;
   ctx.lineCap = 'round';
   // Left arrow
   ctx.beginPath();
-  ctx.moveTo(20, -9); ctx.lineTo(-20, -9);
-  ctx.moveTo(-14, -16); ctx.lineTo(-20, -9); ctx.lineTo(-14, -2);
+  ctx.moveTo(26, -11); ctx.lineTo(-26, -11);
+  ctx.moveTo(-19, -19); ctx.lineTo(-26, -11); ctx.lineTo(-19, -3);
   ctx.stroke();
   // Right arrow
   ctx.beginPath();
-  ctx.moveTo(-20, 9); ctx.lineTo(20, 9);
-  ctx.moveTo(14, 2); ctx.lineTo(20, 9); ctx.lineTo(14, 16);
+  ctx.moveTo(-26, 11); ctx.lineTo(26, 11);
+  ctx.moveTo(19, 3); ctx.lineTo(26, 11); ctx.lineTo(19, 19);
   ctx.stroke();
   ctx.restore();
 }
