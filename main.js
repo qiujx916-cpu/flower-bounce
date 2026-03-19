@@ -447,7 +447,19 @@ class Character {
       return;
     }
 
-    if (this.state === 'inactive' || this.state === 'missed' || this.state === 'waiting') return;
+    if (this.state === 'inactive' || this.state === 'waiting') return;
+
+    // Deferred game-over after miss
+    if (this.state === 'missed') {
+      if (this._missTimer !== undefined) {
+        this._missTimer -= 16;
+        if (this._missTimer <= 0) {
+          this._missTimer = undefined;
+          if (!gameOverTriggered) { playGameOverSound(); gameOver(); }
+        }
+      }
+      return;
+    }
 
     this.vy += CONFIG.GRAVITY;
     this.vx *= CONFIG.AIR_FRICTION;
@@ -525,19 +537,12 @@ class Character {
       }
     }
 
-    // Miss check
+    // Miss check — character fell off screen
     if (this.y > CONFIG.HEIGHT + 50) {
       this.state = 'missed';
       this._missTimer = 300;
       playMissSound();
-    }
-    // Deferred game-over after miss (no setTimeout race)
-    if (this.state === 'missed' && this._missTimer !== undefined) {
-      this._missTimer -= 16; // approximate frame dt
-      if (this._missTimer <= 0) {
-        this._missTimer = undefined;
-        if (!gameOverTriggered) { playGameOverSound(); gameOver(); }
-      }
+      return;
     }
 
     // --- Chain eat smooth slide update ---
