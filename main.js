@@ -415,7 +415,7 @@ class Character {
     this.squash = 1;
     this._sameEndMiss = false;
     playCatchSound();
-    particles.push(...createParticles(this.x, this.y, 5, this.style.body));
+    particles.push(...createParticles(this.x, this.y, 5, this.style.top));
   }
 
   update(dt) {
@@ -510,8 +510,16 @@ class Character {
     // Miss check
     if (this.y > CONFIG.HEIGHT + 50) {
       this.state = 'missed';
+      this._missTimer = 300;
       playMissSound();
-      setTimeout(() => { if (!gameOverTriggered) { playGameOverSound(); gameOver(); } }, 300);
+    }
+    // Deferred game-over after miss (no setTimeout race)
+    if (this.state === 'missed' && this._missTimer !== undefined) {
+      this._missTimer -= 16; // approximate frame dt
+      if (this._missTimer <= 0) {
+        this._missTimer = undefined;
+        if (!gameOverTriggered) { playGameOverSound(); gameOver(); }
+      }
     }
 
     // --- Chain eat smooth slide update ---
@@ -872,10 +880,6 @@ let dropTimer = 0;
 let dropCharId = -1;
 let gameOverTriggered = false;
 
-function scheduleOtherDrop(justCaughtId) {
-  // Legacy - no longer used with seesaw-end mechanics
-  // Launching now happens automatically when one character lands on opposite end
-}
 
 function switchCharPositions() {
   // Find the sitting character and swap it to the other end of the seesaw
@@ -897,7 +901,7 @@ function switchCharPositions() {
       c.x = seesaw.x + (newEnd === 'left' ? -hw * 0.6 : hw * 0.6);
       c.y = seesaw.y - CONFIG.CHAR_RADIUS;
       // Visual feedback
-      particles.push(...createParticles(c.x, c.y, 4, c.style.body));
+      particles.push(...createParticles(c.x, c.y, 4, c.style.top));
       playTone(500, 0.08, 'sine', 0.12);
       screenShake = 2;
       return;
@@ -918,12 +922,9 @@ function updateChars(dt) {
   chars.forEach(c => c.update(dt));
 }
 
-// Backward compat: single `character` reference for countdown code
-const character = { get state() { return chars[0].state; }, set state(v) { chars[0].state = v; } };
 
 // --- Flowers (dense rows, same style per row, full-row refresh) ---
 let flowerRows = []; // array of FlowerRow objects
-let flowers = [];     // flat list for collision (rebuilt from rows)
 
 class FlowerRow {
   constructor(rowIndex) {
@@ -1096,25 +1097,39 @@ function createParticles(x, y, count, color) {
   return p;
 }
 
+// Swap-and-pop removal: O(1) per removal instead of O(n) splice
+function swapRemoveDead(arr, isDead) {
+  let write = 0;
+  for (let read = 0; read < arr.length; read++) {
+    if (!isDead(arr[read])) {
+      arr[write] = arr[read];
+      write++;
+    }
+  }
+  arr.length = write;
+}
+
 function updateParticles(dt) {
-  for (let i = particles.length - 1; i >= 0; i--) {
+  for (let i = 0; i < particles.length; i++) {
     const p = particles[i];
     p.x += p.vx;
     p.y += p.vy;
     p.vy += 0.1;
     p.life -= 0.03;
-    if (p.life <= 0) particles.splice(i, 1);
   }
-  for (let i = scorePopups.length - 1; i >= 0; i--) {
+  swapRemoveDead(particles, p => p.life <= 0);
+
+  for (let i = 0; i < scorePopups.length; i++) {
     scorePopups[i].t -= 0.02;
     scorePopups[i].y -= 1.5;
-    if (scorePopups[i].t <= 0) scorePopups.splice(i, 1);
   }
-  for (let i = comboPopups.length - 1; i >= 0; i--) {
+  swapRemoveDead(scorePopups, sp => sp.t <= 0);
+
+  for (let i = 0; i < comboPopups.length; i++) {
     comboPopups[i].t -= 0.015;
     comboPopups[i].y -= 1.2;
-    if (comboPopups[i].t <= 0) comboPopups.splice(i, 1);
   }
+  swapRemoveDead(comboPopups, cp => cp.t <= 0);
   // Combo timer
   if (comboTimer > 0) {
     comboTimer -= dt;
@@ -1154,6 +1169,65 @@ function drawParticles(ctx) {
 
 // --- Screen shake ---
 let screenShake = 0;
+
+// --- Cached background gradient (avoid recreating every frame) ---
+let _cachedBgGrad = null;
+let _cachedBgWidth = 0;
+let _cachedBgHeight = 0;
+
+// --- Cached static ground layer (grass + small flowers, no animation) ---
+let _groundCanvas = null;
+let _groundW = 0;
+let _groundH = 0;
+
+function getGroundCanvas() {
+  const groundTop = CONFIG.GROUND_TOP || (CONFIG.HEIGHT - 40);
+  const groundH = CONFIG.HEIGHT - groundTop;
+  if (_groundCanvas && _groundW === CONFIG.WIDTH && _groundH === groundH) return { canvas: _groundCanvas, top: groundTop };
+
+  _groundCanvas = document.createElement('canvas');
+  _groundCanvas.width = CONFIG.WIDTH;
+  _groundCanvas.height = groundH + 20; // extra for grass blades above
+  _groundW = CONFIG.WIDTH;
+  _groundH = groundH;
+
+  const gc = _groundCanvas.getContext('2d');
+  const oTop = 20; // offset: grass blades can extend 20px above ground
+
+  // Ground fill
+  gc.fillStyle = '#81c784';
+  gc.fillRect(0, oTop, CONFIG.WIDTH, groundH);
+  gc.fillStyle = '#66bb6a';
+  gc.fillRect(0, oTop, CONFIG.WIDTH, 4);
+
+  // Small ground flowers (static)
+  for (let i = 0; i < 8; i++) {
+    const gfx = (i * 167 + 40) % CONFIG.WIDTH;
+    const gfy = oTop + 8 + (i % 2) * 4;
+    const colors = ['#fff176', '#ef9a9a', '#b39ddb', '#80deea'];
+    gc.fillStyle = colors[i % colors.length];
+    gc.beginPath();
+    gc.arc(gfx, gfy, 3, 0, Math.PI * 2);
+    gc.fill();
+    gc.fillStyle = '#a5d6a7';
+    gc.fillRect(gfx - 0.5, gfy, 1, 5);
+  }
+
+  return { canvas: _groundCanvas, top: groundTop };
+}
+
+function getCachedBgGrad(ctx) {
+  if (!_cachedBgGrad || _cachedBgWidth !== CONFIG.WIDTH || _cachedBgHeight !== CONFIG.HEIGHT) {
+    _cachedBgGrad = ctx.createLinearGradient(0, 0, 0, CONFIG.HEIGHT);
+    _cachedBgGrad.addColorStop(0, '#e3f2fd');
+    _cachedBgGrad.addColorStop(0.4, '#bbdefb');
+    _cachedBgGrad.addColorStop(0.75, '#c8e6c9');
+    _cachedBgGrad.addColorStop(1, '#a5d6a7');
+    _cachedBgWidth = CONFIG.WIDTH;
+    _cachedBgHeight = CONFIG.HEIGHT;
+  }
+  return _cachedBgGrad;
+}
 
 // --- Utility ---
 function roundRect(ctx, x, y, w, h, r) {
@@ -1738,13 +1812,8 @@ function gameLoop(timestamp) {
 
   ctx.clearRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
 
-  // Background gradient (drawn every frame for clarity)
-  const bgGrad = ctx.createLinearGradient(0, 0, 0, CONFIG.HEIGHT);
-  bgGrad.addColorStop(0, '#e3f2fd');
-  bgGrad.addColorStop(0.4, '#bbdefb');
-  bgGrad.addColorStop(0.75, '#c8e6c9');
-  bgGrad.addColorStop(1, '#a5d6a7');
-  ctx.fillStyle = bgGrad;
+  // Background gradient (cached)
+  ctx.fillStyle = getCachedBgGrad(ctx);
   ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
 
   // Subtle cloud decor
@@ -1760,37 +1829,21 @@ function gameLoop(timestamp) {
     ctx.fill();
   }
 
-  // Ground
-  const groundTop = CONFIG.GROUND_TOP || (CONFIG.HEIGHT - 40);
-  const groundH = CONFIG.HEIGHT - groundTop;
-  ctx.fillStyle = '#81c784';
-  ctx.fillRect(0, groundTop, CONFIG.WIDTH, groundH);
-  ctx.fillStyle = '#66bb6a';
-  ctx.fillRect(0, groundTop, CONFIG.WIDTH, 4);
-  // Grass blades
+  // Ground (static layer cached)
+  const ground = getGroundCanvas();
+  ctx.drawImage(ground.canvas, 0, ground.top - 20);
+  // Animated grass blades (drawn on top)
   ctx.strokeStyle = '#4caf50';
   ctx.lineWidth = 2;
   ctx.lineCap = 'round';
   for (let i = 0; i < 60; i++) {
     const gx = (i * 22 + 5) % CONFIG.WIDTH;
-    const gy = groundTop;
+    const gy = ground.top;
     const sway = Math.sin(animFrame * 0.02 + i * 0.7) * 3;
     ctx.beginPath();
     ctx.moveTo(gx, gy);
     ctx.quadraticCurveTo(gx + sway, gy - 10, gx + sway * 1.5, gy - 14 - (i % 3) * 3);
     ctx.stroke();
-  }
-  // Small ground flowers
-  for (let i = 0; i < 8; i++) {
-    const gfx = (i * 167 + 40) % CONFIG.WIDTH;
-    const gfy = groundTop + 8 + (i % 2) * 4;
-    const colors = ['#fff176', '#ef9a9a', '#b39ddb', '#80deea'];
-    ctx.fillStyle = colors[i % colors.length];
-    ctx.beginPath();
-    ctx.arc(gfx, gfy, 3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#a5d6a7';
-    ctx.fillRect(gfx - 0.5, gfy, 1, 5);
   }
 
   if (gameState === 'menu') {
@@ -1880,6 +1933,23 @@ function gameLoop(timestamp) {
     ctx.fillStyle = '#ddd';
     ctx.fillText(isMobile ? '点击任意位置继续' : 'Click pause or press P to resume', CONFIG.WIDTH / 2, CONFIG.HEIGHT / 2 + 25);
     ctx.textBaseline = 'alphabetic';
+  }
+
+  // Speed-up notification
+  if (showSpeedUp > 0) {
+    ctx.save();
+    ctx.globalAlpha = showSpeedUp;
+    ctx.fillStyle = '#ff6f00';
+    ctx.font = 'bold 32px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 4;
+    const label = 'SPEED UP! x' + speedMultiplier.toFixed(1);
+    ctx.strokeText(label, CONFIG.WIDTH / 2, CONFIG.HEIGHT / 2 - 80);
+    ctx.fillText(label, CONFIG.WIDTH / 2, CONFIG.HEIGHT / 2 - 80);
+    ctx.restore();
+    showSpeedUp -= 0.02;
+    if (showSpeedUp < 0) showSpeedUp = 0;
   }
 
   drawHUD(ctx);
@@ -2260,18 +2330,31 @@ function init() {
   window.addEventListener('resize', onResize);
   onResize();
 
+  // Pause BGM when tab is hidden, resume when visible
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      stopBGM();
+      if (audioCtx && audioCtx.state === 'running') audioCtx.suspend();
+    } else {
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+      if (!muted && (gameState === 'playing' || gameState === 'countdown')) startBGM();
+    }
+  });
+
   lastTime = performance.now();
   requestAnimationFrame(gameLoop);
 }
 
 function onResize() {
-  // Force canvas to re-layout — needed on mobile orientation change
   if (!canvas) return;
-  // Ensure DPI scaling for sharp rendering on high-DPI mobile screens
-  const rect = canvas.getBoundingClientRect();
-  const dpr = Math.min(window.devicePixelRatio || 1, 2); // cap at 2x for performance
-  canvas.width = CONFIG.WIDTH;
-  canvas.height = CONFIG.HEIGHT;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = CONFIG.WIDTH * dpr;
+  canvas.height = CONFIG.HEIGHT * dpr;
+  ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  // Invalidate cached gradient on resize
+  _cachedBgGrad = null;
+  _groundCanvas = null;
 }
 
 if (document.readyState === 'loading') {
