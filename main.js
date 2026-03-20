@@ -24,7 +24,7 @@ const CONFIG = {
   FLOWER_RADIUS: 16,
   FLOWER_ROW_TOP: 70,
   FLOWER_ROW_SPACING: 44,
-  FLOWER_SPEEDS: [1.2, -0.9, 1.1, -1.0],
+  FLOWER_SPEEDS: [1.44, -1.08, 1.32, -1.2],
   FLOWER_ROW_RESPAWN_DELAY: 800, // ms before a cleared row respawns
   // Each row has its own style: [petalColor, centerColor]
   FLOWER_ROW_STYLES: [
@@ -64,7 +64,7 @@ if (isMobile) {
   CONFIG.GROUND_TOP = CONFIG.HEIGHT - 80;
   CONFIG.SPEED_INITIAL = 0.9;
   CONFIG.FLOWER_ROWS = 3;
-  CONFIG.FLOWER_SPEEDS = [1.2, -0.9, 1.1];
+  CONFIG.FLOWER_SPEEDS = [1.44, -1.08, 1.32];
   CONFIG.CHAR_RADIUS = 20;    // collision radius stays default
   CONFIG.CHAR_SCALE = 1.35;   // visual scale for character on mobile
   CONFIG.FLOWER_RADIUS = 20;  // larger flowers on mobile (default 16)
