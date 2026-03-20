@@ -494,10 +494,11 @@ class Character {
       return;
     }
 
-    this.vy += CONFIG.GRAVITY;
+    const vScale = 1 + (speedMultiplier - 1) * 0.5; // vertical speed scales at 50% of multiplier
+    this.vy += CONFIG.GRAVITY * vScale;
     this.vx *= CONFIG.AIR_FRICTION;
     this.x += this.vx * speedMultiplier;
-    this.y += this.vy;
+    this.y += this.vy * vScale;
 
     // Wall bounce
     if (this.x < CONFIG.CHAR_RADIUS) { this.x = CONFIG.CHAR_RADIUS; this.vx = Math.abs(this.vx) * 0.6; }
