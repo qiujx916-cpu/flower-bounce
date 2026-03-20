@@ -1,6 +1,6 @@
 // ============================================================
 // Flower Bounce - Pure HTML5 Canvas 2D Game
-// Version: 1.1
+// Version: 2.0
 // ============================================================
 
 // --- Configuration ---
@@ -87,7 +87,8 @@ let combo = 0;
 let comboTimer = 0;
 let comboPopups = [];  // {x, y, combo, t}
 let bestCombo = 0;
-let bounceCount = 0; // chain eat disabled for first 5 bounces
+let bounceCount = 0;
+let lastEatSoundTime = 0; // throttle eat sound to avoid audio spam
 
 // Countdown state
 let countdownNum = 0;      // 3, 2, 1 then 0 = GO
@@ -383,14 +384,10 @@ class Character {
     this.squash = 0;
     this.armAnim = 0;
     this._sameEndMiss = false;
-    this._fallBounceCount = 0; // fall-on-flower bounces this launch (max 2)
+    this._footBounceCount = 0; // feet-hit bounces this launch (max 3, reset on seesaw launch)
     // Chain eat state
-    this._chainQueue = [];
-    this._chainDir = 0;
-    this._chainRow = null;
-    this._chainTimer = 0;
-    this._savedVx = 0;
-    this._savedVy = 0;
+    this._chainQueue = [];  // [{row, index}]
+    this._chainDir = 0;     // -1 left, +1 right
   }
 
   reset(startX, startY) {
@@ -404,13 +401,8 @@ class Character {
     this.squash = 0;
     this.armAnim = 0;
     this._sameEndMiss = false;
-    // Chain eat state
-    this._chainQueue = [];      // [{row, index}] flowers to eat
-    this._chainDir = 0;         // -1 left, +1 right
-    this._chainRow = null;      // FlowerRow being chained
-    this._chainTimer = 0;       // ms until next eat
-    this._savedVx = 0;
-    this._savedVy = 0;
+    this._chainQueue = [];
+    this._chainDir = 0;
   }
 
   setWaiting(x, y) {
@@ -423,7 +415,6 @@ class Character {
     this._sameEndMiss = false;
     this._chainQueue = [];
     this._chainDir = 0;
-    this._chainTimer = 0;
   }
 
   launch() {
@@ -442,8 +433,6 @@ class Character {
     this._sameEndMiss = false;
     this._chainQueue = [];
     this._chainDir = 0;
-    this._chainTimer = 0;
-    // Keep current x (actual landing position) - will smoothly lerp to sitting position in update
     this.y = seesaw.y - CONFIG.CHAR_RADIUS;
   }
 
@@ -470,7 +459,7 @@ class Character {
     this.sittingEnd = null;
     this.squash = 1;
     this._sameEndMiss = false;
-    this._fallBounceCount = 0; // reset fall-on-flower bounce counter each launch
+    this._footBounceCount = 0; // reset foot-bounce counter on seesaw launch
     playCatchSound();
     particles.push(...createParticles(this.x, this.y, 5, this.style.top));
   }
@@ -519,9 +508,9 @@ class Character {
     this.squash *= 0.85;
     this.armAnim += 0.12;
 
-    // State transitions (before collision check to avoid 1-frame skip)
+    // State transitions (else-if prevents double-jump in one frame)
     if (this.state === 'bounced' && this.vy > 0) this.state = 'flying';
-    if (this.vy > 0 && this.state === 'flying') this.state = 'falling';
+    else if (this.vy > 0 && this.state === 'flying') this.state = 'falling';
 
     // Seesaw collision - detect which end (left or right) the character lands on
     // Skip collision if already flagged as same-end miss (falling through)
@@ -584,48 +573,35 @@ class Character {
       return;
     }
 
-    // --- Chain eat smooth slide update ---
+    // --- Chain eat slide update ---
     if (this._chainQueue.length > 0) {
       const next = this._chainQueue[0];
       const row = next.row;
-
-      // Move character WITH the row's scroll so it stays aligned with flowers
-      const rowScrollDelta = row.baseSpeed * speedMultiplier * 0.7;
-      this.x += rowScrollDelta;
-
+      // Move with row scroll to stay aligned
+      this.x += row.baseSpeed * speedMultiplier * 0.7;
       const targetPos = row.getFlowerPos(next.index);
       const slideSpeed = 6;
 
-      // Safety: abort if target invalid or wrapped to other side of screen
-      if (!targetPos || !isFinite(targetPos.x) || !isFinite(targetPos.y)) {
+      // Abort if invalid or wrapped
+      if (!targetPos || !isFinite(targetPos.x) || !isFinite(targetPos.y) ||
+          this.x <= CONFIG.CHAR_RADIUS + 4 || this.x >= CONFIG.WIDTH - CONFIG.CHAR_RADIUS - 4) {
         this._chainQueue = [];
-        this.vx = this._chainDir ? this._chainDir * 2.5 : 0;
+        this.vx = this._chainDir * 2.5;
         this.vy = 1.5;
         return;
       }
 
-      // Check screen edge - abort chain
-      if (this.x <= CONFIG.CHAR_RADIUS + 4 || this.x >= CONFIG.WIDTH - CONFIG.CHAR_RADIUS - 4) {
-        this._chainQueue = [];
-        this.vx = 0;
-        this.vy = 1.5;
-        return;
-      }
-
-      // Lock Y to row
       this.y = row.y;
       const dxToTarget = targetPos.x - this.x;
 
-      // Abort if target wrapped to far side (flower looped around screen)
       if (!isFinite(dxToTarget) || Math.abs(dxToTarget) > CONFIG.WIDTH / 2) {
         this._chainQueue = [];
-        this.vx = this._chainDir ? this._chainDir * 2.5 : 0;
+        this.vx = this._chainDir * 2.5;
         this.vy = 1.5;
         return;
       }
 
       if (Math.abs(dxToTarget) <= slideSpeed + 2) {
-        // Reached the flower - eat it
         this.x = targetPos.x;
         this._chainQueue.shift();
         if (row.active[next.index]) {
@@ -633,16 +609,11 @@ class Character {
           combo++;
           comboTimer = CONFIG.COMBO_WINDOW;
           if (combo > bestCombo) bestCombo = combo;
-          const cp = 1 + Math.floor(combo / 5);
-          score += cp;
-          playEatSound();
-          this.squash = 0.5;
-        } else if (this._chainQueue.length === 0) {
-          this.vx = this._chainDir ? this._chainDir * 2.5 : 0;
-          this.vy = 1.5;
+          score += 1 + Math.floor(combo / 5);
+          const now = performance.now();
+          if (now - lastEatSoundTime > 80) { playEatSound(); lastEatSoundTime = now; }
         }
       } else {
-        // Slide toward flower (relative to row, since we already moved with scroll)
         this.x += Math.sign(dxToTarget) * slideSpeed;
       }
 
@@ -651,7 +622,6 @@ class Character {
       if (this.trail.length > 10) this.trail.shift();
       this.trail.forEach(t => t.a *= 0.82);
       this.armAnim += 0.2;
-      this.squash *= 0.85;
 
       if (this._chainQueue.length === 0) {
         this.vx = this._chainDir * 2.5;
@@ -660,155 +630,105 @@ class Character {
       return; // skip normal physics while chaining
     }
 
-    // Flower collision - with bounce-back and chain-eat mechanics
+    // --- Pass-through chain eat ---
+    // Trigger: rising (vy<0), passed through gap in lower row, reached upper row,
+    // lower row has flowers blocking fall-back. Requires bounceCount > 5.
+    if (bounceCount > 5 && this.vy < 0) {
+      for (let ri = 0; ri < flowerRows.length - 1; ri++) {
+        const row = flowerRows[ri];         // current (upper) row
+        const lowerRow = flowerRows[ri + 1]; // row below
+        const dyToRow = Math.abs(this.y - row.y);
+        if (dyToRow > CONFIG.FLOWER_RADIUS + CONFIG.CHAR_RADIUS * 0.5) continue;
+
+        // Must have risen through a gap in the lower row
+        if (lowerRow.hasFlowerNearX(this.x)) continue;
+        // Lower row must have flowers nearby that block falling back
+        if (!lowerRow.hasFlowerNearX(this.x + 20) && !lowerRow.hasFlowerNearX(this.x - 20)) continue;
+
+        // Find adjacent active flowers in movement direction on current row
+        const moveDir = (this.vx >= 0) ? 1 : -1;
+        const totalWidth = row.count * row.diameter;
+        let closestIdx = -1;
+        let closestDist = Infinity;
+        for (let i = 0; i < row.count; i++) {
+          if (!row.active[i]) continue;
+          let fx = i * row.diameter + row.diameter / 2 + row.offset;
+          fx = ((fx % totalWidth) + totalWidth) % totalWidth - row.diameter;
+          const d = (fx - this.x) * moveDir;
+          if (d > 0 && d < closestDist) {
+            closestDist = d;
+            closestIdx = i;
+          }
+        }
+        if (closestIdx < 0 || closestDist > row.diameter * 2) continue;
+
+        const adj = [closestIdx, ...row.getAdjacentActive(closestIdx, moveDir)];
+        if (adj.length < 2) continue; // need at least 2 consecutive flowers
+
+        // Probability decay: 80% initial, ×0.80 per flower, max 30
+        const maxChain = Math.min(adj.length, 30);
+        let chainCount = 0;
+        let prob = 0.80;
+        for (let ci = 0; ci < maxChain; ci++) {
+          if (Math.random() > prob) break;
+          chainCount++;
+          prob *= 0.80;
+        }
+
+        if (chainCount > 0) {
+          this._chainDir = moveDir;
+          this.vy = 0;
+          this.vx = 0;
+          this.y = row.y;
+          this._chainQueue = adj.slice(0, chainCount).map(idx => ({ row, index: idx }));
+          return;
+        }
+      }
+    }
+
+    // Flower collision with directional bounce rules:
+    // - Rising + flower directly above (head hit) → eat + immediately fall
+    // - Falling + flower directly below (feet hit) → eat + bounce up to row above
+    // - Other angles → eat only, no velocity change
     for (let ri = 0; ri < flowerRows.length; ri++) {
       const row = flowerRows[ri];
       const hitIdx = row.checkCollision(this.x, this.y, CONFIG.CHAR_RADIUS);
       if (hitIdx < 0) continue;
 
-      // --- Eat the first flower ---
-      const pos = row.getFlowerPos(hitIdx);
+      const flowerPos = row.getFlowerPos(hitIdx);
       row.eat(hitIdx);
       combo++;
       comboTimer = CONFIG.COMBO_WINDOW;
       if (combo > bestCombo) bestCombo = combo;
-      const comboBonus = Math.floor(combo / 5);
-      const points = 1 + comboBonus;
+      const points = 1 + Math.floor(combo / 5);
       score += points;
-      // score popup disabled
-      playEatSound();
 
-      // --- Chain-eat trigger ---
-      // Conditions: 0) at least 5 bounces played  1) moving UP  2) NOT the bottom row
-      // 3) came up through a gap in the row below  4) the row below HAS flowers nearby that block falling back
-      if (bounceCount >= 5 && this.vy < 0 && ri < flowerRows.length - 1) {
-        const lowerRow = flowerRows[ri + 1]; // row below current
-        // Character rose through a gap in the lower row to reach this row
-        const cameFromGap = !lowerRow.hasFlowerNearX(this.x);
-        // Lower row has flowers nearby that would block the character from falling back down
-        const blockedBelow = lowerRow.hasFlowerNearX(this.x + 20) || lowerRow.hasFlowerNearX(this.x - 20);
-
-        // Only trigger if rose through a gap AND blocked from falling back by lower row flowers
-        if (cameFromGap && blockedBelow) {
-          // Find adjacent active flowers in the character's horizontal direction
-          const moveDir = (this.vx >= 0) ? 1 : -1;
-          const adj = row.getAdjacentActive(hitIdx, moveDir);
-          // Also check opposite direction as fallback
-          const adjOther = row.getAdjacentActive(hitIdx, -moveDir);
-          let chainCandidates = adj.length >= adjOther.length ? adj : adjOther;
-          const chainDir = adj.length >= adjOther.length ? moveDir : -moveDir;
-
-          // Need at least 2 consecutive flowers to trigger chain
-          if (chainCandidates.length >= 2) {
-            // Probability-based chain length (max 40)
-            const maxChain = Math.min(chainCandidates.length, 40);
-            let chainCount = 0;
-            let prob = 1.0; // 100% initial probability
-            for (let ci = 0; ci < maxChain; ci++) {
-              if (Math.random() > prob) break;
-              chainCount++;
-              prob *= 0.80;
-            }
-
-            if (chainCount > 0) {
-              // Enter chain mode - character slides horizontally at this row's Y
-              this._savedVx = this.vx;
-              this._savedVy = this.vy;
-              this._chainDir = chainDir;
-              this.vy = 0; // stop vertical movement
-              this.vx = 0;
-              this.y = row.y; // lock to row Y
-              this._chainQueue = chainCandidates.slice(0, chainCount).map(idx => ({ row, index: idx }));
-              break; // start chain next frame
-            }
-          }
-        }
+      // Throttled eat sound
+      const now = performance.now();
+      if (now - lastEatSoundTime > 80) {
+        playEatSound();
+        lastEatSoundTime = now;
       }
 
-      // --- Gap-slide chain-eat (patch): character enters from a gap in current row ---
-      // Trigger when: the flower hit is at the edge of a gap (the slot the character came from is empty)
-      // i.e. character entered the gap and the first flower it touches starts the chain
-      if (bounceCount >= 5 && !this._chainQueue.length) {
-        const moveDir = (this.vx >= 0) ? 1 : -1;
-        // Check if the slot character came from (behind in move direction) is a gap
-        const cameFromIdx = hitIdx - moveDir;
-        const enteredFromGap = cameFromIdx < 0 || cameFromIdx >= row.flowers.length || !row.flowers[cameFromIdx].active;
-        if (enteredFromGap) {
-          const adj = row.getAdjacentActive(hitIdx, moveDir);
-          if (adj.length >= 2) {
-            const maxChain = Math.min(adj.length, 40);
-            let chainCount = 0;
-            let prob = 1.0; // 100% initial probability
-            for (let ci = 0; ci < maxChain; ci++) {
-              if (Math.random() > prob) break;
-              chainCount++;
-              prob *= 0.80;
-            }
-            if (chainCount > 0) {
-              this._savedVx = this.vx;
-              this._savedVy = this.vy;
-              this._chainDir = moveDir;
-              this.vy = 0;
-              this.vx = 0;
-              this.y = row.y;
-              this._chainQueue = adj.slice(0, chainCount).map(idx => ({ row, index: idx }));
-              break;
-            }
-          }
+      // Determine hit direction: is flower directly above or below?
+      const dx = Math.abs(this.x - flowerPos.x);
+      const dy = this.y - row.y; // positive = character below flower, negative = above
+      const isVerticalHit = dx < CONFIG.FLOWER_RADIUS * 1.2; // roughly aligned horizontally
+
+      if (isVerticalHit) {
+        if (this.vy < 0 && dy > 0) {
+          // Rising + flower above head → force immediate fall
+          this.vy = Math.max(2, Math.abs(this.vy) * 0.2);
+          this.y = row.y + CONFIG.CHAR_RADIUS + CONFIG.FLOWER_RADIUS; // push below
+        } else if (this.vy > 0 && dy < 0 && this._footBounceCount < 3) {
+          // Falling + flower below feet → bounce up to previous row height (max 3 per launch)
+          this._footBounceCount++;
+          const bounceHeight = CONFIG.FLOWER_ROW_SPACING;
+          const bounceVy = Math.sqrt(2 * CONFIG.GRAVITY * bounceHeight);
+          this.vy = -bounceVy;
+          this.vx = this.vx * 0.85;
+          this.y = row.y - CONFIG.CHAR_RADIUS - CONFIG.FLOWER_RADIUS;
         }
-      }
-
-      // --- Any row chain-eat: 10% chance, probability decay, max 10 flowers (disabled for first 5 bounces) ---
-      if (bounceCount >= 5 && !this._chainQueue.length) {
-        if (Math.random() < 0.10) {
-          const moveDir = (this.vx >= 0) ? 1 : -1;
-          const adj = row.getAdjacentActive(hitIdx, moveDir);
-          const adjOther = row.getAdjacentActive(hitIdx, -moveDir);
-          let chainCandidates = adj.length >= adjOther.length ? adj : adjOther;
-          const chainDir = adj.length >= adjOther.length ? moveDir : -moveDir;
-
-          if (chainCandidates.length >= 1) {
-            const maxChain = Math.min(chainCandidates.length, 10);
-            let chainCount = 0;
-            let prob = 0.80;
-            for (let ci = 0; ci < maxChain; ci++) {
-              if (Math.random() > prob) break;
-              chainCount++;
-              prob *= 0.80;
-            }
-            if (chainCount > 0) {
-              this._savedVx = this.vx;
-              this._savedVy = this.vy;
-              this._chainDir = chainDir;
-              this.vy = 0;
-              this.vx = 0;
-              this.y = row.y;
-              this._chainQueue = chainCandidates.slice(0, chainCount).map(idx => ({ row, index: idx }));
-              break;
-            }
-          }
-        }
-      }
-
-      // --- Physics after hitting flower ---
-      // Rule: only fall-bounce (vy>0, count<2) triggers upward bounce.
-      //       ALL other collisions → deflect downward + exhaust fall-bounce.
-      // After velocity change, nudge position OUT of collision zone to prevent
-      // hitting adjacent flowers in the same row on the next frame.
-      const clearDist = CONFIG.CHAR_RADIUS + CONFIG.FLOWER_RADIUS;
-      if (this.vy > 0 && this._fallBounceCount < 2) {
-        // Fall-bounce: bounce upward, enough to reach the row above
-        this._fallBounceCount++;
-        const minBounceVy = Math.sqrt(2 * CONFIG.GRAVITY * CONFIG.FLOWER_ROW_SPACING * 1.3);
-        this.vy = -Math.max(minBounceVy, Math.abs(this.vy) * 0.5);
-        this.vx = this.vx * 0.9;
-        this.squash = 0.6;
-        this.y = row.y - clearDist; // push above the row
-      } else {
-        // Rising hit or fall-bounce exhausted: force downward
-        this._fallBounceCount = 2;
-        this.vy = Math.max(2, Math.abs(this.vy) * 0.3);
-        this.y = row.y + clearDist; // push below the row
       }
 
       break; // only hit one row per frame
