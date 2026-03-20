@@ -800,7 +800,10 @@ class Character {
 
       // --- Bounce back after hitting flower ---
       if (this.vy < 0) {
-        // Rising: just eat the flower, no bounce/deflection
+        // Rising: eat the flower and deflect downward so character can't punch through
+        this.vy = Math.abs(this.vy) * 0.3;
+        this._hitImmunity = 6;
+        this._immuneRow = ri;
       } else if (this.vy > 0 && this._fallBounceCount < 2) {
         // Falling: eat the flower and bounce upward — enough to reach the row above
         // Limited to 2 times per seesaw launch to prevent infinite bounce loops
