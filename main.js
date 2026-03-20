@@ -1956,7 +1956,6 @@ function startCountdown() {
   countdownNum = 4;
   countdownTimer = 350;
   gameState = 'countdown';
-  startBGM();
 }
 
 function updateCountdown(dt) {
@@ -1970,6 +1969,7 @@ function updateCountdown(dt) {
     } else if (countdownNum < 0) {
       // GO! display time elapsed, now actually start
       gameState = 'playing';
+      startBGM();
       // Drop char A from its current waiting position (follows seesaw area)
       const dropY = CONFIG.FLOWER_ROW_TOP + CONFIG.FLOWER_ROWS * CONFIG.FLOWER_ROW_SPACING + 40;
       chars[0].reset(chars[0].x, dropY);
