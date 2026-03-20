@@ -590,6 +590,14 @@ class Character {
       const targetPos = next.row.getFlowerPos(next.index);
       const slideSpeed = 6; // pixels per frame horizontal slide speed
 
+      // Safety: abort chain if target position is invalid (row reset, NaN, etc.)
+      if (!targetPos || !isFinite(targetPos.x) || !isFinite(targetPos.y)) {
+        this._chainQueue = [];
+        this.vx = this._chainDir ? this._chainDir * 2.5 : 0;
+        this.vy = 1.5;
+        return;
+      }
+
       // Check if at screen edge - abort chain and fall
       if (this.x <= CONFIG.CHAR_RADIUS + 4 || this.x >= CONFIG.WIDTH - CONFIG.CHAR_RADIUS - 4) {
         this._chainQueue = [];
@@ -602,6 +610,14 @@ class Character {
       this.y = next.row.y;
       // Slide X toward target flower
       const dxToTarget = targetPos.x - this.x;
+
+      // Safety: if dxToTarget is NaN or too far, abort chain
+      if (!isFinite(dxToTarget) || Math.abs(dxToTarget) > CONFIG.WIDTH) {
+        this._chainQueue = [];
+        this.vx = this._chainDir ? this._chainDir * 2.5 : 0;
+        this.vy = 1.5;
+        return;
+      }
 
       if (Math.abs(dxToTarget) <= slideSpeed + 2) {
         // Reached the flower - eat it
@@ -618,6 +634,12 @@ class Character {
           // score popup disabled
           playEatSound();
           this.squash = 0.5; // visual squash on each eat
+        } else {
+          // Flower already eaten (row reset?) — skip to next or abort
+          if (this._chainQueue.length === 0) {
+            this.vx = this._chainDir ? this._chainDir * 2.5 : 0;
+            this.vy = 1.5;
+          }
         }
       } else {
         // Slide toward flower
