@@ -1,6 +1,6 @@
 // ============================================================
 // Flower Bounce - Pure HTML5 Canvas 2D Game
-// Version: 1.0
+// Version: 1.1
 // ============================================================
 
 // --- Configuration ---
@@ -586,12 +586,17 @@ class Character {
 
     // --- Chain eat smooth slide update ---
     if (this._chainQueue.length > 0) {
-      // Smoothly slide toward next flower in chain
       const next = this._chainQueue[0];
-      const targetPos = next.row.getFlowerPos(next.index);
-      const slideSpeed = 6; // pixels per frame horizontal slide speed
+      const row = next.row;
 
-      // Safety: abort chain if target position is invalid (row reset, NaN, etc.)
+      // Move character WITH the row's scroll so it stays aligned with flowers
+      const rowScrollDelta = row.baseSpeed * speedMultiplier * 0.7;
+      this.x += rowScrollDelta;
+
+      const targetPos = row.getFlowerPos(next.index);
+      const slideSpeed = 6;
+
+      // Safety: abort if target invalid or wrapped to other side of screen
       if (!targetPos || !isFinite(targetPos.x) || !isFinite(targetPos.y)) {
         this._chainQueue = [];
         this.vx = this._chainDir ? this._chainDir * 2.5 : 0;
@@ -599,7 +604,7 @@ class Character {
         return;
       }
 
-      // Check if at screen edge - abort chain and fall
+      // Check screen edge - abort chain
       if (this.x <= CONFIG.CHAR_RADIUS + 4 || this.x >= CONFIG.WIDTH - CONFIG.CHAR_RADIUS - 4) {
         this._chainQueue = [];
         this.vx = 0;
@@ -607,13 +612,12 @@ class Character {
         return;
       }
 
-      // Keep Y locked at the row level
-      this.y = next.row.y;
-      // Slide X toward target flower
+      // Lock Y to row
+      this.y = row.y;
       const dxToTarget = targetPos.x - this.x;
 
-      // Safety: if dxToTarget is NaN or too far, abort chain
-      if (!isFinite(dxToTarget) || Math.abs(dxToTarget) > CONFIG.WIDTH) {
+      // Abort if target wrapped to far side (flower looped around screen)
+      if (!isFinite(dxToTarget) || Math.abs(dxToTarget) > CONFIG.WIDTH / 2) {
         this._chainQueue = [];
         this.vx = this._chainDir ? this._chainDir * 2.5 : 0;
         this.vy = 1.5;
@@ -624,30 +628,25 @@ class Character {
         // Reached the flower - eat it
         this.x = targetPos.x;
         this._chainQueue.shift();
-        if (next.row.active[next.index]) {
-          next.row.eat(next.index);
+        if (row.active[next.index]) {
+          row.eat(next.index);
           combo++;
           comboTimer = CONFIG.COMBO_WINDOW;
           if (combo > bestCombo) bestCombo = combo;
-          const cb = Math.floor(combo / 5);
-          const cp = 1 + cb;
+          const cp = 1 + Math.floor(combo / 5);
           score += cp;
-          // score popup disabled
           playEatSound();
-          this.squash = 0.5; // visual squash on each eat
-        } else {
-          // Flower already eaten (row reset?) — skip to next or abort
-          if (this._chainQueue.length === 0) {
-            this.vx = this._chainDir ? this._chainDir * 2.5 : 0;
-            this.vy = 1.5;
-          }
+          this.squash = 0.5;
+        } else if (this._chainQueue.length === 0) {
+          this.vx = this._chainDir ? this._chainDir * 2.5 : 0;
+          this.vy = 1.5;
         }
       } else {
-        // Slide toward flower
+        // Slide toward flower (relative to row, since we already moved with scroll)
         this.x += Math.sign(dxToTarget) * slideSpeed;
       }
 
-      // Trail while sliding
+      // Trail
       this.trail.push({ x: this.x, y: this.y, a: 1 });
       if (this.trail.length > 10) this.trail.shift();
       this.trail.forEach(t => t.a *= 0.82);
@@ -655,9 +654,8 @@ class Character {
       this.squash *= 0.85;
 
       if (this._chainQueue.length === 0) {
-        // Chain done - continue with momentum in the slide direction
         this.vx = this._chainDir * 2.5;
-        this.vy = 1.5; // gentle fall after chain
+        this.vy = 1.5;
       }
       return; // skip normal physics while chaining
     }
@@ -795,6 +793,9 @@ class Character {
       // --- Physics after hitting flower ---
       // Rule: only fall-bounce (vy>0, count<2) triggers upward bounce.
       //       ALL other collisions → deflect downward + exhaust fall-bounce.
+      // After velocity change, nudge position OUT of collision zone to prevent
+      // hitting adjacent flowers in the same row on the next frame.
+      const clearDist = CONFIG.CHAR_RADIUS + CONFIG.FLOWER_RADIUS;
       if (this.vy > 0 && this._fallBounceCount < 2) {
         // Fall-bounce: bounce upward, enough to reach the row above
         this._fallBounceCount++;
@@ -802,11 +803,12 @@ class Character {
         this.vy = -Math.max(minBounceVy, Math.abs(this.vy) * 0.5);
         this.vx = this.vx * 0.9;
         this.squash = 0.6;
+        this.y = row.y - clearDist; // push above the row
       } else {
         // Rising hit or fall-bounce exhausted: force downward
-        // Exhaust fall-bounce counter to prevent further oscillation
         this._fallBounceCount = 2;
         this.vy = Math.max(2, Math.abs(this.vy) * 0.3);
+        this.y = row.y + clearDist; // push below the row
       }
 
       break; // only hit one row per frame
