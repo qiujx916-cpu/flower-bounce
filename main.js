@@ -41,10 +41,10 @@ const CONFIG = {
   BOUNCE_SIDE_VX: 5.0,
   AIR_FRICTION: 0.997,
   // Speed system
-  SPEED_INITIAL: 1.2,
+  SPEED_INITIAL: 1.4,
   SPEED_INCREMENT: 0.2,
   SPEED_INTERVAL: 2000,
-  SPEED_MAX: 2.6,
+  SPEED_MAX: 2.4,
   SPEED_MAX_HOLD: 4000, // ms to hold at max speed before resetting
   // Combo system
   COMBO_WINDOW: 1500, // ms to continue combo
