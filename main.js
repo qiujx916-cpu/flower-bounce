@@ -44,7 +44,7 @@ const CONFIG = {
   SPEED_INITIAL: 1.2,
   SPEED_INCREMENT: 0.1,
   SPEED_INTERVAL: 2000,
-  SPEED_MAX: 2.0,
+  SPEED_MAX: 1.8,
   SPEED_MAX_HOLD: 4000, // ms to hold at max speed before resetting
   // Combo system
   COMBO_WINDOW: 1500, // ms to continue combo
