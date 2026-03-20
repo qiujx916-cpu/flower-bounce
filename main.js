@@ -590,8 +590,8 @@ class Character {
       if (!targetPos || !isFinite(targetPos.x) || !isFinite(targetPos.y) ||
           this.x <= CONFIG.CHAR_RADIUS + 4 || this.x >= CONFIG.WIDTH - CONFIG.CHAR_RADIUS - 4) {
         this._chainQueue = [];
-        this.vx = this._preChainVx || this._chainDir * 2.5;
-        this.vy = this._preChainVy || 1.5;
+        this.vx = (this._preChainVx || this._chainDir * 2.5) * 0.8;
+        this.vy = (this._preChainVy || 1.5) * 0.8;
         return;
       }
 
@@ -600,8 +600,8 @@ class Character {
 
       if (!isFinite(dxToTarget) || Math.abs(dxToTarget) > CONFIG.WIDTH / 2) {
         this._chainQueue = [];
-        this.vx = this._preChainVx || this._chainDir * 2.5;
-        this.vy = this._preChainVy || 1.5;
+        this.vx = (this._preChainVx || this._chainDir * 2.5) * 0.8;
+        this.vy = (this._preChainVy || 1.5) * 0.8;
         return;
       }
 
@@ -628,8 +628,8 @@ class Character {
       this.armAnim += 0.2;
 
       if (this._chainQueue.length === 0) {
-        this.vx = this._preChainVx || this._chainDir * 2.5;
-        this.vy = this._preChainVy || 1.5;
+        this.vx = (this._preChainVx || this._chainDir * 2.5) * 0.8;
+        this.vy = (this._preChainVy || 1.5) * 0.8;
       }
       return; // skip normal physics while chaining
     }
@@ -729,10 +729,13 @@ class Character {
         } else if (this.vy > 0 && dy < 0 && this._footBounceCount < 3) {
           // Falling + flower below feet → bounce up to previous row height (max 3 per launch)
           this._footBounceCount++;
+          // First bounce: decay to 80% original speed, then hold
+          if (this._footBounceCount === 1) {
+            this.vx = this.vx * 0.8;
+          }
           const bounceHeight = CONFIG.FLOWER_ROW_SPACING;
           const bounceVy = Math.sqrt(2 * CONFIG.GRAVITY * bounceHeight);
           this.vy = -bounceVy;
-          this.vx = this.vx * 0.85;
           this.y = row.y - CONFIG.CHAR_RADIUS - CONFIG.FLOWER_RADIUS;
         }
       }
