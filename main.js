@@ -798,21 +798,21 @@ class Character {
         }
       }
 
-      // --- Bounce back after hitting flower ---
-      if (this.vy < 0) {
-        // Rising: eat the flower and deflect downward so character can't punch through
-        this.vy = Math.abs(this.vy) * 0.3;
-        this._hitImmunity = 6;
-        this._immuneRow = ri;
-      } else if (this.vy > 0 && this._fallBounceCount < 2) {
-        // Falling: eat the flower and bounce upward — enough to reach the row above
-        // Limited to 2 times per seesaw launch to prevent infinite bounce loops
+      // --- Physics after hitting flower ---
+      // Rule: only fall-bounce (vy>0, count<2) triggers upward bounce.
+      //       ALL other collisions → deflect downward and immune.
+      if (this.vy > 0 && this._fallBounceCount < 2) {
+        // Fall-bounce: bounce upward, enough to reach the row above
         this._fallBounceCount++;
         const minBounceVy = Math.sqrt(2 * CONFIG.GRAVITY * CONFIG.FLOWER_ROW_SPACING * 1.3);
         this.vy = -Math.max(minBounceVy, Math.abs(this.vy) * 0.5);
         this.vx = this.vx * 0.9;
         this.squash = 0.6;
-        // Immunity: skip this row for several frames to prevent oscillation flicker
+        this._hitImmunity = 8;
+        this._immuneRow = ri;
+      } else {
+        // All other cases (rising, or fall-bounce exhausted): force downward
+        this.vy = Math.max(2, Math.abs(this.vy) * 0.3);
         this._hitImmunity = 8;
         this._immuneRow = ri;
       }
