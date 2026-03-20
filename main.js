@@ -266,56 +266,26 @@ function pollOnlineScores(dt) {
   }
 }
 
-// Submit score to Supabase (only keep highest score per name)
-// Uses upsert-style logic: read → compute max → write back
+// Submit score to Supabase (always INSERT; client-side dedup keeps highest per name)
+// Avoids UPDATE/DELETE which may be blocked by Supabase RLS
 async function submitOnlineScore(name, scoreVal) {
   if (!sbClient) return;
   const playerNameStr = name || '匿名';
   const platform = isMobile ? 'mobile' : 'desktop';
   const now = new Date().toISOString();
   try {
-    // Fetch ALL records for this player (may have duplicates)
+    // Check if this player already has a higher score in DB
     const { data: existing, error: fetchErr } = await sbClient
       .from('scores')
-      .select('id, score')
+      .select('score')
       .eq('name', playerNameStr)
-      .order('score', { ascending: false });
+      .order('score', { ascending: false })
+      .limit(1);
 
-    if (fetchErr) {
-      console.warn('Fetch existing score failed:', fetchErr);
-    }
+    const bestDbScore = (!fetchErr && existing && existing.length > 0) ? existing[0].score : -1;
 
-    const records = (!fetchErr && existing) ? existing : [];
-
-    if (records.length > 0) {
-      const bestRecord = records[0];
-      const highestScore = Math.max(bestRecord.score, scoreVal);
-
-      // Only write if the new score is actually higher
-      if (highestScore > bestRecord.score) {
-        const { error: updateErr } = await sbClient
-          .from('scores')
-          .update({ score: highestScore, platform, created_at: now })
-          .eq('id', bestRecord.id);
-
-        // If update fails (e.g. RLS), try delete + insert as fallback
-        if (updateErr) {
-          console.warn('Update failed, trying delete+insert:', updateErr);
-          await sbClient.from('scores').delete().eq('id', bestRecord.id);
-          const { error: insertErr } = await sbClient.from('scores').insert({
-            name: playerNameStr, score: highestScore, platform, created_at: now
-          });
-          if (insertErr) console.warn('Fallback insert also failed:', insertErr);
-        }
-      }
-
-      // Delete any duplicate records for this name (keep only the best)
-      if (records.length > 1) {
-        const dupeIds = records.slice(1).map(r => r.id);
-        await sbClient.from('scores').delete().in('id', dupeIds);
-      }
-    } else {
-      // New player — insert
+    // Only insert if this score is higher than what's already in DB
+    if (scoreVal > bestDbScore) {
       const { error: insertErr } = await sbClient.from('scores').insert({
         name: playerNameStr, score: scoreVal, platform, created_at: now
       });
