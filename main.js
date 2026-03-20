@@ -1,6 +1,6 @@
 // ============================================================
 // Flower Bounce - Pure HTML5 Canvas 2D Game
-// Version: 2.1
+// Version: 2.2
 // ============================================================
 
 // --- Configuration ---
@@ -28,11 +28,12 @@ const CONFIG = {
   FLOWER_ROW_RESPAWN_DELAY: 800, // ms before a cleared row respawns
   // Each row has its own style: [petalColor, centerColor]
   FLOWER_ROW_STYLES: [
-    { petal: '#ff6b9d', center: '#ffeb3b' },  // Row 1: pink petals, yellow center
-    { petal: '#64b5f6', center: '#fff176' },  // Row 2: blue petals, yellow center
-    { petal: '#ce93d8', center: '#ffcc02' },  // Row 3: purple petals, gold center
-    { petal: '#ff8a65', center: '#fff9c4' },  // Row 4: orange petals, cream center
+    { petal: '#ff6b9d', center: '#ffeb3b', specialPetal: '#cc1155', specialCenter: '#ff8800' },  // Row 1: pink → deep rose
+    { petal: '#64b5f6', center: '#fff176', specialPetal: '#1565c0', specialCenter: '#ffab00' },  // Row 2: blue → deep blue
+    { petal: '#ce93d8', center: '#ffcc02', specialPetal: '#7b1fa2', specialCenter: '#ff6f00' },  // Row 3: purple → deep purple
+    { petal: '#ff8a65', center: '#fff9c4', specialPetal: '#d84315', specialCenter: '#ffd600' },  // Row 4: orange → deep orange
   ],
+  FLOWER_SPECIAL_THRESHOLD: 0.3, // spawn special when active < 30%
   // Physics (gravity fixed per frame, not speed-scaled)
   GRAVITY: 0.40,
   BOUNCE_BASE_VY: -25,
@@ -706,7 +707,8 @@ class Character {
       combo++;
       comboTimer = CONFIG.COMBO_WINDOW;
       if (combo > bestCombo) bestCombo = combo;
-      const points = 1 + Math.floor(combo / 5);
+      const basePoints = (ri === 0) ? 2 : 1; // top row = 2 points
+      const points = basePoints + Math.floor(combo / 5);
       score += points;
 
       // Throttled eat sound
@@ -1032,12 +1034,16 @@ class FlowerRow {
     this.diameter = diameter;
     // Per-flower active state
     this.active = new Array(this.count).fill(true);
+    this.special = new Array(this.count).fill(false); // special flower flags
+    this.specialSpawned = false; // whether a special flower exists in this row
     this.respawnTimer = 0;
     this.respawning = false;
   }
 
   resetRow() {
     this.active.fill(true);
+    this.special.fill(false);
+    this.specialSpawned = false;
     this.respawning = false;
     this.respawnTimer = 0;
   }
@@ -1047,15 +1053,23 @@ class FlowerRow {
   }
 
   eat(index) {
+    const wasSpecial = this.special[index];
     this.active[index] = false;
+    this.special[index] = false;
     const pos = this.getFlowerPos(index);
-    particles.push(...createParticles(pos.x, pos.y, 6, this.style.petal));
-    // scorePopup created by caller with actual points
+    const particleColor = wasSpecial ? this.style.specialPetal : this.style.petal;
+    particles.push(...createParticles(pos.x, pos.y, wasSpecial ? 12 : 6, particleColor));
+    // If special flower eaten, refresh entire row
+    if (wasSpecial) {
+      this.resetRow();
+      return true; // signal: was special
+    }
     // Check if whole row is cleared
     if (this.allEaten() && !this.respawning) {
       this.respawning = true;
       this.respawnTimer = CONFIG.FLOWER_ROW_RESPAWN_DELAY;
     }
+    return false;
   }
 
   getFlowerPos(index) {
@@ -1066,6 +1080,10 @@ class FlowerRow {
     return { x, y: this.y };
   }
 
+  activeCount() {
+    return this.active.reduce((sum, a) => sum + (a ? 1 : 0), 0);
+  }
+
   update(dt) {
     this.offset += this.baseSpeed * speedMultiplier * 0.7;
     // Handle row respawn
@@ -1073,6 +1091,24 @@ class FlowerRow {
       this.respawnTimer -= dt;
       if (this.respawnTimer <= 0) {
         this.resetRow();
+      }
+    }
+    // Spawn special flower when active < 30% and no special exists
+    if (!this.specialSpawned && !this.respawning) {
+      const ratio = this.activeCount() / this.count;
+      if (ratio > 0 && ratio < CONFIG.FLOWER_SPECIAL_THRESHOLD) {
+        // Find an inactive slot near the edge (entering from scroll direction)
+        const enterFromRight = this.baseSpeed > 0;
+        const start = enterFromRight ? this.count - 1 : 0;
+        const step = enterFromRight ? -1 : 1;
+        for (let i = start; i >= 0 && i < this.count; i += step) {
+          if (!this.active[i]) {
+            this.active[i] = true;
+            this.special[i] = true;
+            this.specialSpawned = true;
+            break;
+          }
+        }
       }
     }
   }
@@ -1090,30 +1126,47 @@ class FlowerRow {
       if (x < -r * 2 || x > CONFIG.WIDTH + r * 2) continue;
       const y = this.y + bob;
 
-      // Petals (6 petals, same color for whole row)
+      const isSpecial = this.special[i];
+      const petalColor = isSpecial ? this.style.specialPetal : this.style.petal;
+      const centerColor = isSpecial ? this.style.specialCenter : this.style.center;
+      const scale = isSpecial ? 1.25 : 1;
+      const sr = r * scale;
+      // Special flower: faster spin + glow
+      const spinSpeed = isSpecial ? 0.04 : 0.008;
+
+      // Glow for special flowers
+      if (isSpecial) {
+        ctx.fillStyle = petalColor;
+        ctx.globalAlpha = 0.25 + Math.sin(animFrame * 0.08) * 0.1;
+        ctx.beginPath();
+        ctx.arc(x, y, sr * 1.3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Petals (6 petals)
       const petalCount = 6;
       for (let p = 0; p < petalCount; p++) {
-        const angle = (p / petalCount) * Math.PI * 2 + animFrame * 0.008;
-        const px = x + Math.cos(angle) * r * 0.58;
-        const py = y + Math.sin(angle) * r * 0.58;
-        ctx.fillStyle = this.style.petal;
-        ctx.globalAlpha = 0.88;
+        const angle = (p / petalCount) * Math.PI * 2 + animFrame * spinSpeed;
+        const px = x + Math.cos(angle) * sr * 0.58;
+        const py = y + Math.sin(angle) * sr * 0.58;
+        ctx.fillStyle = petalColor;
+        ctx.globalAlpha = isSpecial ? 1 : 0.88;
         ctx.beginPath();
-        ctx.ellipse(px, py, r * 0.44, r * 0.34, angle, 0, Math.PI * 2);
+        ctx.ellipse(px, py, sr * 0.44, sr * 0.34, angle, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.globalAlpha = 1;
 
       // Center
-      ctx.fillStyle = this.style.center;
+      ctx.fillStyle = centerColor;
       ctx.beginPath();
-      ctx.arc(x, y, r * 0.35, 0, Math.PI * 2);
+      ctx.arc(x, y, sr * 0.35, 0, Math.PI * 2);
       ctx.fill();
 
       // Highlight
       ctx.fillStyle = 'rgba(255,255,255,0.45)';
       ctx.beginPath();
-      ctx.arc(x - 1.5, y - 1.5, r * 0.15, 0, Math.PI * 2);
+      ctx.arc(x - 1.5, y - 1.5, sr * 0.15, 0, Math.PI * 2);
       ctx.fill();
     }
   }
