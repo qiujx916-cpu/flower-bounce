@@ -64,6 +64,7 @@ if (isMobile) {
   CONFIG.SPEED_INITIAL = 0.8;
   CONFIG.FLOWER_ROWS = 3;
   CONFIG.FLOWER_SPEEDS = [1.2, -0.9, 1.1];
+  CONFIG.CHAR_RADIUS = 26;   // larger character on mobile
 }
 
 // --- Global State ---
@@ -728,6 +729,29 @@ class Character {
           this.vy = -bounceVy;
           this.vx = this.vx * 0.85;
           this.y = row.y - CONFIG.CHAR_RADIUS - CONFIG.FLOWER_RADIUS;
+        }
+      }
+
+      // --- Random bottom-row chain eat: 15% chance if adjacent flowers, max 8 ---
+      if (bounceCount > 5 && ri === flowerRows.length - 1) {
+        const moveDir = (this.vx >= 0) ? 1 : -1;
+        const adj = row.getAdjacentActive(hitIdx, moveDir);
+        if (adj.length >= 1 && Math.random() < 0.15) {
+          const maxChain = Math.min(adj.length, 8);
+          let chainCount = 0;
+          let prob = 0.80;
+          for (let ci = 0; ci < maxChain; ci++) {
+            if (Math.random() > prob) break;
+            chainCount++;
+            prob *= 0.80;
+          }
+          if (chainCount > 0) {
+            this._chainDir = moveDir;
+            this.vy = 0;
+            this.vx = 0;
+            this.y = row.y;
+            this._chainQueue = adj.slice(0, chainCount).map(idx => ({ row, index: idx }));
+          }
         }
       }
 
