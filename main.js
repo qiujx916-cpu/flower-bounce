@@ -1129,17 +1129,16 @@ class FlowerRow {
       const isSpecial = this.special[i];
       const petalColor = isSpecial ? this.style.specialPetal : this.style.petal;
       const centerColor = isSpecial ? this.style.specialCenter : this.style.center;
-      const scale = isSpecial ? 1.25 : 1;
-      const sr = r * scale;
-      // Special flower: faster spin + glow
+      const sr = r; // same size as normal flowers
+      // Special flower: faster spin + subtle glow
       const spinSpeed = isSpecial ? 0.04 : 0.008;
 
-      // Glow for special flowers
+      // Subtle glow for special flowers
       if (isSpecial) {
         ctx.fillStyle = petalColor;
-        ctx.globalAlpha = 0.25 + Math.sin(animFrame * 0.08) * 0.1;
+        ctx.globalAlpha = 0.2 + Math.sin(animFrame * 0.08) * 0.08;
         ctx.beginPath();
-        ctx.arc(x, y, sr * 1.3, 0, Math.PI * 2);
+        ctx.arc(x, y, r * 1.05, 0, Math.PI * 2);
         ctx.fill();
       }
 
