@@ -585,7 +585,8 @@ class Character {
       // Move with row scroll to stay aligned
       this.x += row.baseSpeed * speedMultiplier * 0.7;
       const targetPos = row.getFlowerPos(next.index);
-      const slideSpeed = Math.max(4, Math.abs(this._preChainVx || 6));
+      const totalSpeed = Math.sqrt((this._preChainVx || 0) ** 2 + (this._preChainVy || 0) ** 2);
+      const slideSpeed = Math.max(6, totalSpeed);
 
       // Abort if invalid or wrapped
       if (!targetPos || !isFinite(targetPos.x) || !isFinite(targetPos.y) ||
