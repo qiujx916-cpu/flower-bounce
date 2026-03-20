@@ -1,6 +1,6 @@
 // ============================================================
 // Flower Bounce - Pure HTML5 Canvas 2D Game
-// Version: 2.3
+// Version: 2.4
 // ============================================================
 
 // --- Configuration ---
@@ -1036,6 +1036,7 @@ class FlowerRow {
     this.active = new Array(this.count).fill(true);
     this.special = new Array(this.count).fill(false); // special flower flags
     this.specialSpawned = false; // whether a special flower exists in this row
+    this._activeCount = this.count; // cached active count
     this.respawnTimer = 0;
     this.respawning = false;
   }
@@ -1044,6 +1045,7 @@ class FlowerRow {
     this.active.fill(true);
     this.special.fill(false);
     this.specialSpawned = false;
+    this._activeCount = this.count;
     this.respawning = false;
     this.respawnTimer = 0;
   }
@@ -1056,6 +1058,7 @@ class FlowerRow {
     const wasSpecial = this.special[index];
     this.active[index] = false;
     this.special[index] = false;
+    this._activeCount--;
     const pos = this.getFlowerPos(index);
     const particleColor = wasSpecial ? this.style.specialPetal : this.style.petal;
     particles.push(...createParticles(pos.x, pos.y, wasSpecial ? 12 : 6, particleColor));
@@ -1081,7 +1084,7 @@ class FlowerRow {
   }
 
   activeCount() {
-    return this.active.reduce((sum, a) => sum + (a ? 1 : 0), 0);
+    return this._activeCount;
   }
 
   update(dt) {
@@ -1106,6 +1109,7 @@ class FlowerRow {
             this.active[i] = true;
             this.special[i] = true;
             this.specialSpawned = true;
+            this._activeCount++;
             break;
           }
         }
@@ -1117,57 +1121,118 @@ class FlowerRow {
     const r = CONFIG.FLOWER_RADIUS;
     const totalWidth = this.count * this.diameter;
     const bob = Math.sin(animFrame * 0.03 + this.rowIndex) * 2;
+    const y = this.y + bob;
+    const petalCount = 6;
+    const normalSpin = animFrame * 0.008;
+    const specialSpin = animFrame * 0.04;
+    const petalRx = r * 0.44;
+    const petalRy = r * 0.34;
+    const petalDist = r * 0.58;
+    const centerR = r * 0.35;
+    const highlightR = r * 0.15;
 
+    // Collect visible flower positions, split by normal/special
+    const normals = [];
+    const specials = [];
     for (let i = 0; i < this.count; i++) {
       if (!this.active[i]) continue;
       let x = i * this.diameter + this.diameter / 2 + this.offset;
       x = ((x % totalWidth) + totalWidth) % totalWidth - this.diameter;
-      // Only draw if on screen
       if (x < -r * 2 || x > CONFIG.WIDTH + r * 2) continue;
-      const y = this.y + bob;
+      (this.special[i] ? specials : normals).push(x);
+    }
 
-      const isSpecial = this.special[i];
-      const petalColor = isSpecial ? this.style.specialPetal : this.style.petal;
-      const centerColor = isSpecial ? this.style.specialCenter : this.style.center;
-      const sr = r; // same size as normal flowers
-      // Special flower: faster spin + subtle glow
-      const spinSpeed = isSpecial ? 0.04 : 0.008;
-
-      // Subtle glow for special flowers
-      if (isSpecial) {
-        ctx.fillStyle = petalColor;
-        ctx.globalAlpha = 0.2 + Math.sin(animFrame * 0.08) * 0.08;
-        ctx.beginPath();
-        ctx.arc(x, y, r * 1.05, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      // Petals (6 petals)
-      const petalCount = 6;
-      for (let p = 0; p < petalCount; p++) {
-        const angle = (p / petalCount) * Math.PI * 2 + animFrame * spinSpeed;
-        const px = x + Math.cos(angle) * sr * 0.58;
-        const py = y + Math.sin(angle) * sr * 0.58;
-        ctx.fillStyle = petalColor;
-        ctx.globalAlpha = isSpecial ? 1 : 0.88;
-        ctx.beginPath();
-        ctx.ellipse(px, py, sr * 0.44, sr * 0.34, angle, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-
-      // Center
-      ctx.fillStyle = centerColor;
+    // --- Draw normal flowers (batched) ---
+    if (normals.length > 0) {
+      // Petals
+      ctx.fillStyle = this.style.petal;
+      ctx.globalAlpha = 0.88;
       ctx.beginPath();
-      ctx.arc(x, y, sr * 0.35, 0, Math.PI * 2);
+      for (let fi = 0; fi < normals.length; fi++) {
+        const x = normals[fi];
+        for (let p = 0; p < petalCount; p++) {
+          const angle = (p / petalCount) * Math.PI * 2 + normalSpin;
+          const px = x + Math.cos(angle) * petalDist;
+          const py = y + Math.sin(angle) * petalDist;
+          ctx.moveTo(px + petalRx, py);
+          ctx.ellipse(px, py, petalRx, petalRy, angle, 0, Math.PI * 2);
+        }
+      }
       ctx.fill();
 
-      // Highlight
+      // Centers
+      ctx.fillStyle = this.style.center;
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      for (let fi = 0; fi < normals.length; fi++) {
+        const x = normals[fi];
+        ctx.moveTo(x + centerR, y);
+        ctx.arc(x, y, centerR, 0, Math.PI * 2);
+      }
+      ctx.fill();
+
+      // Highlights
       ctx.fillStyle = 'rgba(255,255,255,0.45)';
       ctx.beginPath();
-      ctx.arc(x - 1.5, y - 1.5, sr * 0.15, 0, Math.PI * 2);
+      for (let fi = 0; fi < normals.length; fi++) {
+        const x = normals[fi];
+        ctx.moveTo(x - 1.5 + highlightR, y - 1.5);
+        ctx.arc(x - 1.5, y - 1.5, highlightR, 0, Math.PI * 2);
+      }
       ctx.fill();
     }
+
+    // --- Draw special flowers (fewer, separate batch) ---
+    if (specials.length > 0) {
+      // Glow
+      ctx.fillStyle = this.style.specialPetal;
+      ctx.globalAlpha = 0.2 + Math.sin(animFrame * 0.08) * 0.08;
+      ctx.beginPath();
+      for (let fi = 0; fi < specials.length; fi++) {
+        const x = specials[fi];
+        ctx.moveTo(x + r * 1.05, y);
+        ctx.arc(x, y, r * 1.05, 0, Math.PI * 2);
+      }
+      ctx.fill();
+
+      // Petals
+      ctx.fillStyle = this.style.specialPetal;
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      for (let fi = 0; fi < specials.length; fi++) {
+        const x = specials[fi];
+        for (let p = 0; p < petalCount; p++) {
+          const angle = (p / petalCount) * Math.PI * 2 + specialSpin;
+          const px = x + Math.cos(angle) * petalDist;
+          const py = y + Math.sin(angle) * petalDist;
+          ctx.moveTo(px + petalRx, py);
+          ctx.ellipse(px, py, petalRx, petalRy, angle, 0, Math.PI * 2);
+        }
+      }
+      ctx.fill();
+
+      // Centers
+      ctx.fillStyle = this.style.specialCenter;
+      ctx.beginPath();
+      for (let fi = 0; fi < specials.length; fi++) {
+        const x = specials[fi];
+        ctx.moveTo(x + centerR, y);
+        ctx.arc(x, y, centerR, 0, Math.PI * 2);
+      }
+      ctx.fill();
+
+      // Highlights
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      ctx.beginPath();
+      for (let fi = 0; fi < specials.length; fi++) {
+        const x = specials[fi];
+        ctx.moveTo(x - 1.5 + highlightR, y - 1.5);
+        ctx.arc(x - 1.5, y - 1.5, highlightR, 0, Math.PI * 2);
+      }
+      ctx.fill();
+    }
+
+    ctx.globalAlpha = 1;
   }
 
   // Find adjacent active flowers from a starting index in a given direction
