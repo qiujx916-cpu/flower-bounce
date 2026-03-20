@@ -590,8 +590,8 @@ class Character {
       if (!targetPos || !isFinite(targetPos.x) || !isFinite(targetPos.y) ||
           this.x <= CONFIG.CHAR_RADIUS + 4 || this.x >= CONFIG.WIDTH - CONFIG.CHAR_RADIUS - 4) {
         this._chainQueue = [];
-        this.vx = (this._preChainVx || this._chainDir * 2.5) * 0.8;
-        this.vy = (this._preChainVy || 1.5) * 0.8;
+        this.vx = this._preChainVx || this._chainDir * 2.5;
+        this.vy = this._preChainVy || 1.5;
         return;
       }
 
@@ -600,8 +600,8 @@ class Character {
 
       if (!isFinite(dxToTarget) || Math.abs(dxToTarget) > CONFIG.WIDTH / 2) {
         this._chainQueue = [];
-        this.vx = (this._preChainVx || this._chainDir * 2.5) * 0.8;
-        this.vy = (this._preChainVy || 1.5) * 0.8;
+        this.vx = this._preChainVx || this._chainDir * 2.5;
+        this.vy = this._preChainVy || 1.5;
         return;
       }
 
@@ -628,8 +628,8 @@ class Character {
       this.armAnim += 0.2;
 
       if (this._chainQueue.length === 0) {
-        this.vx = (this._preChainVx || this._chainDir * 2.5) * 0.8;
-        this.vy = (this._preChainVy || 1.5) * 0.8;
+        this.vx = this._preChainVx || this._chainDir * 2.5;
+        this.vy = this._preChainVy || 1.5;
       }
       return; // skip normal physics while chaining
     }
