@@ -1536,13 +1536,12 @@ function drawMobileSwapButton(ctx) {
   ctx.stroke();
   ctx.restore();
 
-  // Flashing hint text during countdown
+  // Static hint text during countdown
   if (gameState === 'countdown') {
-    const blink = Math.sin(Date.now() * 0.006) * 0.5 + 0.5; // 0~1 oscillation
-    ctx.fillStyle = `rgba(233,30,99,${blink * 0.7})`;
-    ctx.font = 'bold 26px "Segoe UI", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText('点击切换跷跷板方向', b.cx - b.radius, b.cy + b.radius + 28);
+    ctx.fillStyle = 'rgba(233,30,99,0.55)';
+    ctx.font = 'bold 34px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('点击切换跷跷板方向', b.cx, b.cy + b.radius + 50);
   }
 }
 
