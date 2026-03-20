@@ -2021,6 +2021,8 @@ function startGame() {
 
 // --- Main Loop ---
 function gameLoop(timestamp) {
+  requestAnimationFrame(gameLoop); // always schedule next frame first
+  try {
   const dt = Math.min(timestamp - lastTime, 33);
   lastTime = timestamp;
   animFrame++;
@@ -2066,7 +2068,6 @@ function gameLoop(timestamp) {
 
   if (gameState === 'menu') {
     drawMenu(ctx);
-    requestAnimationFrame(gameLoop);
     return;
   }
 
@@ -2174,7 +2175,7 @@ function gameLoop(timestamp) {
     drawMobileSwapButton(ctx);
   }
 
-  requestAnimationFrame(gameLoop);
+  } catch (e) { console.error('Game loop error:', e); }
 }
 
 // --- Input Handling ---
