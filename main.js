@@ -66,7 +66,7 @@ if (isMobile) {
   CONFIG.FLOWER_ROWS = 3;
   CONFIG.FLOWER_SPEEDS = [1.2, -0.9, 1.1];
   CONFIG.CHAR_RADIUS = 20;    // collision radius stays default
-  CONFIG.CHAR_SCALE = 1.7;    // visual scale for character on mobile
+  CONFIG.CHAR_SCALE = 1.35;   // visual scale for character on mobile
   CONFIG.FLOWER_RADIUS = 20;  // larger flowers on mobile (default 16)
 }
 
