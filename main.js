@@ -61,7 +61,7 @@ const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
 if (isMobile) {
   CONFIG.WIDTH = 1600;        // wider canvas for phone aspect ratio (~20:9)
   CONFIG.SEESAW_WIDTH = 280;
-  CONFIG.SEESAW_Y = 520;
+  CONFIG.SEESAW_Y = 540;
   CONFIG.GROUND_TOP = CONFIG.HEIGHT - 80;
   CONFIG.SPEED_INITIAL = 1.0;
   CONFIG.FLOWER_ROWS = 3;
