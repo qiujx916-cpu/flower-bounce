@@ -673,14 +673,14 @@ class Character {
         const adj = [closestIdx, ...row.getAdjacentActive(closestIdx, moveDir)];
         if (adj.length < 2) continue; // need at least 2 consecutive flowers
 
-        // Probability decay: 80% initial, ×0.80 per flower, max 30
-        const maxChain = Math.min(adj.length, 30);
+        // Probability decay: 100% initial, ×0.90 per flower, max 50
+        const maxChain = Math.min(adj.length, 50);
         let chainCount = 0;
-        let prob = 0.80;
+        let prob = 1.0;
         for (let ci = 0; ci < maxChain; ci++) {
           if (Math.random() > prob) break;
           chainCount++;
-          prob *= 0.80;
+          prob *= 0.90;
         }
 
         if (chainCount > 0) {
