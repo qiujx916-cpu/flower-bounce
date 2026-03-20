@@ -455,12 +455,16 @@ class Character {
     // landingDx > 0 means lander hit right side -> sitting char (on opposite side) flies more to the left
     // The further from center the landing, the more horizontal the bounce
     const edgeFactor = Math.abs(landingDx || 0); // 0~1, 0=center, 1=edge
-    const dirSign = this.sittingEnd === 'left' ? -1 : 1;
+    const baseDir = this.sittingEnd === 'left' ? -1 : 1;
+    const dirSign = Math.random() < 0.2 ? -baseDir : baseDir;
     // Center landing: mostly vertical (vx small). Edge landing: more angled (vx large)
     const baseVx = CONFIG.BOUNCE_SIDE_VX * speedMultiplier;
-    this.vx = dirSign * baseVx * (0.2 + edgeFactor * 0.8);
+    const rawVx = baseVx * (0.2 + edgeFactor * 0.8);
     // Edge landing also gives slightly less vertical power (more angled trajectory)
     this.vy *= (1.0 - edgeFactor * 0.15);
+    // Cap bounce angle to 11° from vertical
+    const maxVx = Math.abs(this.vy) * Math.tan(11 * Math.PI / 180);
+    this.vx = dirSign * Math.min(rawVx, maxVx);
 
     this.state = 'bounced';
     this.sittingEnd = null;
