@@ -42,9 +42,9 @@ const CONFIG = {
   // Speed system
   SPEED_INITIAL: 0.9,
   SPEED_INCREMENT: 0.25,
-  SPEED_INTERVAL: 5000,
-  SPEED_MAX: 1.8,
-  SPEED_MAX_HOLD: 5000, // ms to hold at max speed before resetting
+  SPEED_INTERVAL: 4000,
+  SPEED_MAX: 2.0,
+  SPEED_MAX_HOLD: 4000, // ms to hold at max speed before resetting
   // Combo system
   COMBO_WINDOW: 1500, // ms to continue combo
   // Leaderboard
@@ -62,7 +62,7 @@ if (isMobile) {
   CONFIG.SEESAW_WIDTH = 280;
   CONFIG.SEESAW_Y = 520;
   CONFIG.GROUND_TOP = CONFIG.HEIGHT - 80;
-  CONFIG.SPEED_INITIAL = 0.8;
+  CONFIG.SPEED_INITIAL = 0.9;
   CONFIG.FLOWER_ROWS = 3;
   CONFIG.FLOWER_SPEEDS = [1.2, -0.9, 1.1];
   CONFIG.CHAR_RADIUS = 20;    // collision radius stays default
