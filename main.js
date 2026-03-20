@@ -254,7 +254,7 @@ let _scoresPollTimer = 0;
 const SCORES_POLL_INTERVAL = 10000;
 
 function pollOnlineScores(dt) {
-  const shouldPoll = gameState === 'gameover' || showLeaderboard;
+  const shouldPoll = true; // always poll while page is open
   if (!shouldPoll) {
     _scoresPollTimer = 0;
     return;
