@@ -236,10 +236,22 @@ async function fetchOnlineScores() {
   onlineScoresLoading = false;
 }
 
-// Auto-refresh leaderboard every 10 seconds when it's visible
-// (game over screen or leaderboard panel open)
+// Supabase Realtime: subscribe to scores table changes for instant sync
+function subscribeToScores() {
+  if (!sbClient) return;
+  try {
+    sbClient
+      .channel('scores-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'scores' }, () => {
+        fetchOnlineScores();
+      })
+      .subscribe();
+  } catch (e) { console.warn('Realtime subscribe failed:', e); }
+}
+
+// Fallback poll every 10s in case Realtime is not available
 let _scoresPollTimer = 0;
-const SCORES_POLL_INTERVAL = 10000; // 10 seconds
+const SCORES_POLL_INTERVAL = 10000;
 
 function pollOnlineScores(dt) {
   const shouldPoll = gameState === 'gameover' || showLeaderboard;
@@ -2476,8 +2488,9 @@ function init() {
   canvas.height = CONFIG.HEIGHT;
   initNameInput();
 
-  // Pre-fetch leaderboard so it's ready before first game ends
+  // Pre-fetch leaderboard and subscribe to realtime changes
   fetchOnlineScores();
+  subscribeToScores();
 
   // Mouse
   canvas.addEventListener('mousemove', onMouseMove);
