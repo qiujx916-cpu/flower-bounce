@@ -208,7 +208,7 @@ let showNameInput = false;   // show name input on game over
 let nameInputText = '';
 let nameInputCursor = 0;     // blink timer
 
-// Fetch top scores from Supabase
+// Fetch top scores from Supabase (deduplicated: one entry per name, highest score only)
 async function fetchOnlineScores() {
   if (!sbClient) return;
   onlineScoresLoading = true;
@@ -217,9 +217,19 @@ async function fetchOnlineScores() {
       .from('scores')
       .select('name, score, platform, created_at')
       .order('score', { ascending: false })
-      .limit(50);
+      .limit(100);
     if (!error && data) {
-      onlineScores = data;
+      // Client-side deduplication: keep only the highest score per name
+      const seen = new Map();
+      const deduped = [];
+      for (const entry of data) {
+        const key = entry.name || '匿名';
+        if (!seen.has(key)) {
+          seen.set(key, true);
+          deduped.push(entry);
+        }
+      }
+      onlineScores = deduped;
       onlineScoresLoaded = true;
     }
   } catch (e) { console.warn('Fetch scores failed:', e); }
@@ -227,35 +237,61 @@ async function fetchOnlineScores() {
 }
 
 // Submit score to Supabase (only keep highest score per name)
+// Uses upsert-style logic: read → compute max → write back
 async function submitOnlineScore(name, scoreVal) {
   if (!sbClient) return;
   const playerNameStr = name || '匿名';
   const platform = isMobile ? 'mobile' : 'desktop';
+  const now = new Date().toISOString();
   try {
-    // Check if this player already has a record
-    const { data: existing } = await sbClient
+    // Fetch ALL records for this player (may have duplicates)
+    const { data: existing, error: fetchErr } = await sbClient
       .from('scores')
       .select('id, score')
       .eq('name', playerNameStr)
-      .limit(1);
+      .order('score', { ascending: false });
 
-    if (existing && existing.length > 0) {
-      // Only update if new score is higher
-      if (scoreVal > existing[0].score) {
-        await sbClient
+    if (fetchErr) {
+      console.warn('Fetch existing score failed:', fetchErr);
+    }
+
+    const records = (!fetchErr && existing) ? existing : [];
+
+    if (records.length > 0) {
+      const bestRecord = records[0];
+      const highestScore = Math.max(bestRecord.score, scoreVal);
+
+      // Only write if the new score is actually higher
+      if (highestScore > bestRecord.score) {
+        const { error: updateErr } = await sbClient
           .from('scores')
-          .update({ score: scoreVal, platform, created_at: new Date().toISOString() })
-          .eq('id', existing[0].id);
+          .update({ score: highestScore, platform, created_at: now })
+          .eq('id', bestRecord.id);
+
+        // If update fails (e.g. RLS), try delete + insert as fallback
+        if (updateErr) {
+          console.warn('Update failed, trying delete+insert:', updateErr);
+          await sbClient.from('scores').delete().eq('id', bestRecord.id);
+          const { error: insertErr } = await sbClient.from('scores').insert({
+            name: playerNameStr, score: highestScore, platform, created_at: now
+          });
+          if (insertErr) console.warn('Fallback insert also failed:', insertErr);
+        }
+      }
+
+      // Delete any duplicate records for this name (keep only the best)
+      if (records.length > 1) {
+        const dupeIds = records.slice(1).map(r => r.id);
+        await sbClient.from('scores').delete().in('id', dupeIds);
       }
     } else {
-      // New player, insert
-      await sbClient.from('scores').insert({
-        name: playerNameStr,
-        score: scoreVal,
-        platform
+      // New player — insert
+      const { error: insertErr } = await sbClient.from('scores').insert({
+        name: playerNameStr, score: scoreVal, platform, created_at: now
       });
+      if (insertErr) console.warn('Insert score failed:', insertErr);
     }
-    fetchOnlineScores();
+    await fetchOnlineScores();
   } catch (e) { console.warn('Submit score failed:', e); }
 }
 
@@ -346,6 +382,7 @@ class Character {
     this.squash = 0;
     this.armAnim = 0;
     this._sameEndMiss = false;
+    this._fallBounceCount = 0; // fall-on-flower bounces this launch (max 2)
     // Chain eat state
     this._chainQueue = [];
     this._chainDir = 0;
@@ -432,6 +469,7 @@ class Character {
     this.sittingEnd = null;
     this.squash = 1;
     this._sameEndMiss = false;
+    this._fallBounceCount = 0; // reset fall-on-flower bounce counter each launch
     playCatchSound();
     particles.push(...createParticles(this.x, this.y, 5, this.style.top));
   }
@@ -577,7 +615,7 @@ class Character {
           const cb = Math.floor(combo / 5);
           const cp = 1 + cb;
           score += cp;
-          scorePopups.push({ x: targetPos.x, y: targetPos.y - 10, t: 1, points: cp });
+          // score popup disabled
           playEatSound();
           this.squash = 0.5; // visual squash on each eat
         }
@@ -616,7 +654,7 @@ class Character {
       const comboBonus = Math.floor(combo / 5);
       const points = 1 + comboBonus;
       score += points;
-      scorePopups.push({ x: pos.x, y: pos.y, t: 1, points });
+      // score popup disabled
       playEatSound();
 
       // --- Chain-eat trigger ---
@@ -666,9 +704,9 @@ class Character {
         }
       }
 
-      // --- Any row chain-eat: 15% chance, max 10 flowers ---
-      if (!this._chainQueue.length) {
-        if (Math.random() < 0.15) {
+      // --- Any row chain-eat: 10% chance, probability decay, max 10 flowers (disabled for first 5 bounces) ---
+      if (bounceCount > 5 && !this._chainQueue.length) {
+        if (Math.random() < 0.10) {
           const moveDir = (this.vx >= 0) ? 1 : -1;
           const adj = row.getAdjacentActive(hitIdx, moveDir);
           const adjOther = row.getAdjacentActive(hitIdx, -moveDir);
@@ -677,23 +715,39 @@ class Character {
 
           if (chainCandidates.length >= 1) {
             const maxChain = Math.min(chainCandidates.length, 10);
-            if (maxChain > 0) {
+            let chainCount = 0;
+            let prob = 0.80;
+            for (let ci = 0; ci < maxChain; ci++) {
+              if (Math.random() > prob) break;
+              chainCount++;
+              prob *= 0.80;
+            }
+            if (chainCount > 0) {
               this._savedVx = this.vx;
               this._savedVy = this.vy;
               this._chainDir = chainDir;
               this.vy = 0;
               this.vx = 0;
               this.y = row.y;
-              this._chainQueue = chainCandidates.slice(0, maxChain).map(idx => ({ row, index: idx }));
+              this._chainQueue = chainCandidates.slice(0, chainCount).map(idx => ({ row, index: idx }));
               break;
             }
           }
         }
       }
 
-      // --- Bounce back: stop upward movement after hitting flower ---
+      // --- Bounce back after hitting flower ---
       if (this.vy < 0) {
+        // Rising: stop upward movement, deflect downward
         this.vy = Math.abs(this.vy) * 0.3;
+      } else if (this.vy > 0 && this._fallBounceCount < 2) {
+        // Falling: eat the flower and bounce upward — enough to reach the row above
+        // Limited to 2 times per seesaw launch to prevent infinite bounce loops
+        this._fallBounceCount++;
+        const minBounceVy = Math.sqrt(2 * CONFIG.GRAVITY * CONFIG.FLOWER_ROW_SPACING * 1.3);
+        this.vy = -Math.max(minBounceVy, Math.abs(this.vy) * 0.5);
+        this.vx = this.vx * 0.9;
+        this.squash = 0.6;
       }
 
       break; // only hit one row per frame
@@ -1575,43 +1629,89 @@ function drawGameOver(ctx) {
   roundRect(ctx, px, py, pw, ph, 22);
   ctx.stroke();
 
+  // Header: Game Over
   ctx.fillStyle = '#d32f2f';
   ctx.font = 'bold 34px "Segoe UI", sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('Game Over', CONFIG.WIDTH / 2, py + 48);
 
-  ctx.fillStyle = '#333';
-  ctx.font = 'bold 26px "Segoe UI", sans-serif';
-  ctx.fillText('Score: ' + score, CONFIG.WIDTH / 2, py + 85);
-
-  // Online Leaderboard Title
+  // Player info: nickname + current score
+  const displayName = playerName || '匿名';
+  ctx.fillStyle = '#555';
+  ctx.font = '20px "Segoe UI", sans-serif';
+  ctx.fillText(displayName, CONFIG.WIDTH / 2, py + 80);
   ctx.fillStyle = '#e91e63';
-  ctx.font = 'bold 20px "Segoe UI", sans-serif';
-  ctx.fillText('\u{1F3C6} 排行榜 Top 10', CONFIG.WIDTH / 2, py + 118);
+  ctx.font = 'bold 30px "Segoe UI", sans-serif';
+  ctx.fillText('' + score, CONFIG.WIDTH / 2, py + 115);
 
-  // Online scores list
+  // Divider line
+  ctx.strokeStyle = '#eee';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(px + 30, py + 128);
+  ctx.lineTo(px + pw - 30, py + 128);
+  ctx.stroke();
+
+  // Online scores list (no title, directly show ranking)
   const medals = ['\u{1F947}', '\u{1F948}', '\u{1F949}'];
-  ctx.font = '18px "Segoe UI", sans-serif';
   const listTop = py + 135;
   const rowH = 28;
+  const myName = playerName || '匿名';
+  const myPlatform = isMobile ? 'mobile' : 'desktop';
 
-  if (onlineScoresLoading && !onlineScoresLoaded) {
+  // Build a merged ranking list: take DB data, but ensure the player's
+  // entry reflects max(DB score, current game score) so it's always correct
+  // regardless of whether the async DB update has completed yet.
+  const merged = buildMergedScores(onlineScores, myName, score, myPlatform);
+
+  if (onlineScoresLoading && !onlineScoresLoaded && merged.length === 0) {
     ctx.fillStyle = '#999';
-    ctx.fillText('加载中...', CONFIG.WIDTH / 2, listTop + 30);
-  } else if (onlineScores.length === 0) {
+    ctx.font = '18px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('加载中...', CONFIG.WIDTH / 2, listTop + 50);
+  } else if (merged.length === 0) {
     ctx.fillStyle = '#999';
-    ctx.fillText('暂无记录', CONFIG.WIDTH / 2, listTop + 30);
+    ctx.font = '18px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('暂无记录', CONFIG.WIDTH / 2, listTop + 50);
   } else {
-    const show = Math.min(onlineScores.length, 10);
-    for (let i = 0; i < show; i++) {
-      const entry = onlineScores[i];
-      const rank = i < 3 ? medals[i] : `${i + 1}.`;
+    // Find my rank in the full merged list (by name match)
+    const myRankIdx = merged.findIndex(e => e.name === myName);
+    // Show top 10, but ensure my entry is always visible
+    const showList = merged.slice(0, 10);
+    let myAppended = false;
+    if (myRankIdx >= 10) {
+      showList.push(merged[myRankIdx]);
+      myAppended = true;
+    }
+
+    for (let i = 0; i < showList.length; i++) {
+      const entry = showList[i];
+      const actualRank = (myAppended && i === showList.length - 1) ? myRankIdx + 1 : i + 1;
+      const rank = actualRank <= 3 ? medals[actualRank - 1] : `${actualRank}.`;
       const name = (entry.name || '匿名').slice(0, 8);
-      const platformTag = entry.platform === 'mobile' ? '📱' : '💻';
+      const platformTag = entry.platform === 'mobile' ? '\u{1F4F1}' : '\u{1F4BB}';
       const y = listTop + i * rowH + 14;
 
-      // Highlight current score
-      const isMe = entry.score === score && entry.name === (playerName || '匿名');
+      // Draw separator before appended "my entry" row
+      if (myAppended && i === showList.length - 1) {
+        ctx.strokeStyle = '#ddd';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(px + 40, y - 16);
+        ctx.lineTo(px + pw - 40, y - 16);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // Highlight my row (match by name)
+      const isMe = entry.name === myName;
+      if (isMe) {
+        ctx.fillStyle = 'rgba(233,30,99,0.08)';
+        roundRect(ctx, px + 20, y - 16, pw - 40, rowH, 6);
+        ctx.fill();
+      }
       ctx.fillStyle = isMe ? '#e91e63' : '#555';
       ctx.font = isMe ? 'bold 18px "Segoe UI", sans-serif' : '18px "Segoe UI", sans-serif';
 
@@ -1637,6 +1737,36 @@ function drawGameOver(ctx) {
   ctx.fillText('Play Again', CONFIG.WIDTH / 2, by + 33);
 }
 
+// Build a display-only leaderboard that merges three data sources for the
+// player's score: DB, current game, and localStorage best. This guarantees
+// the displayed score is always the all-time highest, even if DB writes fail.
+function buildMergedScores(dbScores, myName, currentScore, platform) {
+  const now = new Date().toISOString();
+  // Local best score (localStorage is always writable, so this is reliable)
+  const localScores = getTopScores();
+  const localBest = localScores.length > 0 ? localScores[0] : 0;
+
+  let found = false;
+  const result = dbScores.map(e => {
+    if (e.name === myName) {
+      found = true;
+      const best = Math.max(e.score, currentScore, localBest);
+      if (best !== e.score) {
+        return { ...e, score: best, platform, created_at: now };
+      }
+      return e;
+    }
+    return e;
+  });
+  // Player has no DB record yet — add with best known score
+  if (myName && !found) {
+    const best = Math.max(currentScore, localBest);
+    result.push({ name: myName, score: best, platform, created_at: now });
+  }
+  result.sort((a, b) => b.score - a.score);
+  return result;
+}
+
 // --- Game Over Logic ---
 function gameOver() {
   if (gameOverTriggered) return;
@@ -1647,16 +1777,18 @@ function gameOver() {
   saveScore(score);
   screenShake = 8;
   // If player already has a name, auto-submit and show leaderboard directly
+  // Submit the local all-time best (not just this game's score) to DB
   if (playerName) {
     showNameInput = false;
-    submitOnlineScore(playerName, score);
+    const localBest = Math.max(score, ...(getTopScores()));
+    submitOnlineScore(playerName, localBest);
   } else {
     showNameInput = true;
     nameInputText = '';
     nameInputCursor = 0;
     if (_nameInputEl) _nameInputEl.value = '';
+    fetchOnlineScores();
   }
-  fetchOnlineScores();
 }
 
 // --- Countdown ---
@@ -1963,22 +2095,8 @@ function gameLoop(timestamp) {
     ctx.textBaseline = 'alphabetic';
   }
 
-  // Speed-up notification
-  if (showSpeedUp > 0) {
-    ctx.save();
-    ctx.globalAlpha = showSpeedUp;
-    ctx.fillStyle = '#ff6f00';
-    ctx.font = 'bold 32px "Segoe UI", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 4;
-    const label = 'SPEED UP! x' + speedMultiplier.toFixed(1);
-    ctx.strokeText(label, CONFIG.WIDTH / 2, CONFIG.HEIGHT / 2 - 80);
-    ctx.fillText(label, CONFIG.WIDTH / 2, CONFIG.HEIGHT / 2 - 80);
-    ctx.restore();
-    showSpeedUp -= 0.02;
-    if (showSpeedUp < 0) showSpeedUp = 0;
-  }
+  // Speed-up notification (disabled)
+  showSpeedUp = 0;
 
   drawHUD(ctx);
 
@@ -2095,7 +2213,8 @@ function handleGameClick(gx, gy) {
       if (gx >= sbx && gx <= sbx + sbw && gy >= sby && gy <= sby + sbh) {
         playerName = nameInputText || '匿名';
         localStorage.setItem('flowerBounce_name', playerName);
-        submitOnlineScore(playerName, score);
+        const localBest = Math.max(score, ...(getTopScores()));
+        submitOnlineScore(playerName, localBest);
         showNameInput = false;
         blurNameInput();
         playClickSound();
@@ -2335,6 +2454,9 @@ function init() {
   canvas.width = CONFIG.WIDTH;
   canvas.height = CONFIG.HEIGHT;
   initNameInput();
+
+  // Pre-fetch leaderboard so it's ready before first game ends
+  fetchOnlineScores();
 
   // Mouse
   canvas.addEventListener('mousemove', onMouseMove);
