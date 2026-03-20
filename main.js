@@ -236,6 +236,24 @@ async function fetchOnlineScores() {
   onlineScoresLoading = false;
 }
 
+// Auto-refresh leaderboard every 10 seconds when it's visible
+// (game over screen or leaderboard panel open)
+let _scoresPollTimer = 0;
+const SCORES_POLL_INTERVAL = 10000; // 10 seconds
+
+function pollOnlineScores(dt) {
+  const shouldPoll = gameState === 'gameover' || showLeaderboard;
+  if (!shouldPoll) {
+    _scoresPollTimer = 0;
+    return;
+  }
+  _scoresPollTimer += dt;
+  if (_scoresPollTimer >= SCORES_POLL_INTERVAL) {
+    _scoresPollTimer = 0;
+    fetchOnlineScores();
+  }
+}
+
 // Submit score to Supabase (only keep highest score per name)
 // Uses upsert-style logic: read → compute max → write back
 async function submitOnlineScore(name, scoreVal) {
@@ -1969,6 +1987,9 @@ function gameLoop(timestamp) {
   const dt = Math.min(timestamp - lastTime, 33);
   lastTime = timestamp;
   animFrame++;
+
+  // Poll leaderboard for real-time updates when visible
+  pollOnlineScores(dt);
 
   ctx.clearRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
 
