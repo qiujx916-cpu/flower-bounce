@@ -585,15 +585,14 @@ class Character {
       // Move with row scroll to stay aligned
       this.x += row.baseSpeed * speedMultiplier * 0.7;
       const targetPos = row.getFlowerPos(next.index);
-      const totalSpeed = Math.sqrt((this._preChainVx || 0) ** 2 + (this._preChainVy || 0) ** 2);
-      const slideSpeed = Math.max(6, totalSpeed);
+      const slideSpeed = Math.max(6, Math.abs(this._preChainVx || 6));
 
       // Abort if invalid or wrapped
       if (!targetPos || !isFinite(targetPos.x) || !isFinite(targetPos.y) ||
           this.x <= CONFIG.CHAR_RADIUS + 4 || this.x >= CONFIG.WIDTH - CONFIG.CHAR_RADIUS - 4) {
         this._chainQueue = [];
         this.vx = (this._preChainVx || this._chainDir * 2.5) * 0.8;
-        this.vy = (this._preChainVy || 1.5) * 0.8;
+        this.vy = 1.5; // gentle fixed drop, avoid sudden speed burst
         return;
       }
 
@@ -603,7 +602,7 @@ class Character {
       if (!isFinite(dxToTarget) || Math.abs(dxToTarget) > CONFIG.WIDTH / 2) {
         this._chainQueue = [];
         this.vx = (this._preChainVx || this._chainDir * 2.5) * 0.8;
-        this.vy = (this._preChainVy || 1.5) * 0.8;
+        this.vy = 1.5; // gentle fixed drop, avoid sudden speed burst
         return;
       }
 
@@ -631,7 +630,7 @@ class Character {
 
       if (this._chainQueue.length === 0) {
         this.vx = (this._preChainVx || this._chainDir * 2.5) * 0.8;
-        this.vy = (this._preChainVy || 1.5) * 0.8;
+        this.vy = 1.5; // gentle fixed drop, avoid sudden speed burst
       }
       return; // skip normal physics while chaining
     }
