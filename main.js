@@ -1540,8 +1540,8 @@ function drawMobileSwapButton(ctx) {
   if (gameState === 'countdown') {
     ctx.fillStyle = 'rgba(233,30,99,0.55)';
     ctx.font = 'bold 34px "Segoe UI", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('点击切换跷跷板方向', b.cx, b.cy + b.radius + 50);
+    ctx.textAlign = 'left';
+    ctx.fillText('点击切换跷跷板方向', 20, b.cy + b.radius + 50);
   }
 }
 
