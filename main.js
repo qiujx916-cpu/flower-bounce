@@ -496,7 +496,7 @@ class Character {
       return;
     }
 
-    const vScale = 1 + (speedMultiplier - 1) * 0.25; // vertical speed scales at 25% of multiplier
+    const vScale = 1 + (speedMultiplier - 1) * 0.1; // vertical speed scales at 10% of multiplier
     this.vy += CONFIG.GRAVITY * vScale;
     this.vx *= CONFIG.AIR_FRICTION;
     this.x += this.vx * speedMultiplier;
