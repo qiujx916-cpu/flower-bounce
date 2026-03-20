@@ -679,10 +679,10 @@ class Character {
 
           // Need at least 2 consecutive flowers to trigger chain
           if (chainCandidates.length >= 2) {
-            // Probability-based chain length (max 30)
-            const maxChain = Math.min(chainCandidates.length, 30);
+            // Probability-based chain length (max 40)
+            const maxChain = Math.min(chainCandidates.length, 40);
             let chainCount = 0;
-            let prob = 0.80;
+            let prob = 1.0; // 100% initial probability
             for (let ci = 0; ci < maxChain; ci++) {
               if (Math.random() > prob) break;
               chainCount++;
@@ -699,6 +699,39 @@ class Character {
               this.y = row.y; // lock to row Y
               this._chainQueue = chainCandidates.slice(0, chainCount).map(idx => ({ row, index: idx }));
               break; // start chain next frame
+            }
+          }
+        }
+      }
+
+      // --- Gap-slide chain-eat (patch): character passes through a gap in current row ---
+      // Trigger when: hit a flower right at the edge of a gap (adjacent to empty slot in move direction)
+      // and there are >=2 consecutive flowers ahead
+      if (bounceCount >= 5 && !this._chainQueue.length) {
+        const moveDir = (this.vx >= 0) ? 1 : -1;
+        // Check if there's a gap (inactive flower) on the opposite side of movement direction
+        const behindIdx = hitIdx - moveDir;
+        const hasGapBehind = behindIdx < 0 || behindIdx >= row.flowers.length || !row.flowers[behindIdx].active;
+        if (hasGapBehind) {
+          const adj = row.getAdjacentActive(hitIdx, moveDir);
+          if (adj.length >= 2) {
+            const maxChain = Math.min(adj.length, 40);
+            let chainCount = 0;
+            let prob = 1.0; // 100% initial probability
+            for (let ci = 0; ci < maxChain; ci++) {
+              if (Math.random() > prob) break;
+              chainCount++;
+              prob *= 0.80;
+            }
+            if (chainCount > 0) {
+              this._savedVx = this.vx;
+              this._savedVy = this.vy;
+              this._chainDir = moveDir;
+              this.vy = 0;
+              this.vx = 0;
+              this.y = row.y;
+              this._chainQueue = adj.slice(0, chainCount).map(idx => ({ row, index: idx }));
+              break;
             }
           }
         }
