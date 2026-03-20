@@ -2020,6 +2020,20 @@ function drawCountdown(ctx) {
   ctx.fillText(label, 0, 0);
   ctx.restore();
 
+  // Flashing hint text on PC during countdown (between countdown and seesaw)
+  if (!isMobile && countdownNum > 0) {
+    const hintAlpha = Math.sin(animFrame * 0.12) * 0.4 + 0.6; // 0.2~1.0 flashing
+    const hintY = (CONFIG.HEIGHT / 2 + CONFIG.SEESAW_Y) / 2;
+    ctx.save();
+    ctx.globalAlpha = hintAlpha;
+    ctx.fillStyle = '#555';
+    ctx.font = 'bold 22px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('单击切换跷跷板方向', CONFIG.WIDTH / 2, hintY);
+    ctx.restore();
+  }
+
   // --- Drop preview indicator for waiting character A ---
   const charA = chars[0];
   if (charA.state === 'waiting') {
