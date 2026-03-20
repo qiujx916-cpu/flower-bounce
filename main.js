@@ -33,7 +33,7 @@ const CONFIG = {
   ],
   // Physics (gravity fixed per frame, not speed-scaled)
   GRAVITY: 0.40,
-  BOUNCE_BASE_VY: -22,
+  BOUNCE_BASE_VY: -25,
   BOUNCE_SPEED_SCALE: 0.35,  // how much speedMultiplier boosts bounce
   BOUNCE_SIDE_VX: 5.0,
   AIR_FRICTION: 0.997,
