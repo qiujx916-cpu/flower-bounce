@@ -15,6 +15,7 @@ const CONFIG = {
   SEESAW_HIGHLIGHT: '#f48fb1',
   // Character
   CHAR_RADIUS: 20,
+  CHAR_SCALE: 1,          // visual scale multiplier for character drawing
   CHAR_COLOR: '#ff7043',
   CHAR_EYE_COLOR: '#fff',
   CHAR_PUPIL_COLOR: '#333',
@@ -64,7 +65,8 @@ if (isMobile) {
   CONFIG.SPEED_INITIAL = 0.8;
   CONFIG.FLOWER_ROWS = 3;
   CONFIG.FLOWER_SPEEDS = [1.2, -0.9, 1.1];
-  CONFIG.CHAR_RADIUS = 34;    // larger character on mobile
+  CONFIG.CHAR_RADIUS = 20;    // collision radius stays default
+  CONFIG.CHAR_SCALE = 1.7;    // visual scale for character on mobile
   CONFIG.FLOWER_RADIUS = 20;  // larger flowers on mobile (default 16)
 }
 
@@ -773,8 +775,9 @@ class Character {
     });
     ctx.globalAlpha = isWaiting ? 0.5 : 1;
 
-    const scX = 1 + this.squash * 0.25;
-    const scY = 1 - this.squash * 0.18;
+    const baseScale = CONFIG.CHAR_SCALE;
+    const scX = baseScale * (1 + this.squash * 0.25);
+    const scY = baseScale * (1 - this.squash * 0.18);
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.scale(scX, scY);
