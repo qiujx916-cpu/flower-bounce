@@ -660,7 +660,7 @@ class Character {
       // --- Chain-eat trigger ---
       // Conditions: 0) at least 5 bounces played  1) moving UP  2) NOT the bottom row
       // 3) came up through a gap in the row below  4) the row below HAS flowers nearby that block falling back
-      if (bounceCount > 5 && this.vy < 0 && ri < flowerRows.length - 1) {
+      if (bounceCount >= 5 && this.vy < 0 && ri < flowerRows.length - 1) {
         const lowerRow = flowerRows[ri + 1]; // row below current
         // Character rose through a gap in the lower row to reach this row
         const cameFromGap = !lowerRow.hasFlowerNearX(this.x);
@@ -705,7 +705,7 @@ class Character {
       }
 
       // --- Any row chain-eat: 10% chance, probability decay, max 10 flowers (disabled for first 5 bounces) ---
-      if (bounceCount > 5 && !this._chainQueue.length) {
+      if (bounceCount >= 5 && !this._chainQueue.length) {
         if (Math.random() < 0.10) {
           const moveDir = (this.vx >= 0) ? 1 : -1;
           const adj = row.getAdjacentActive(hitIdx, moveDir);
