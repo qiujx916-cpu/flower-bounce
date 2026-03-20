@@ -13,7 +13,7 @@ const CONFIG = {
   SEESAW_COLOR: '#e91e63',
   SEESAW_HIGHLIGHT: '#f48fb1',
   // Character
-  CHAR_RADIUS: 16,
+  CHAR_RADIUS: 20,
   CHAR_COLOR: '#ff7043',
   CHAR_EYE_COLOR: '#fff',
   CHAR_PUPIL_COLOR: '#333',
