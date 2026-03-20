@@ -1951,7 +1951,7 @@ function startCountdown() {
   seesaw.x = CONFIG.WIDTH / 2;
   // Countdown state: start at 4 with same interval, so "3" appears after 550ms delay
   countdownNum = 4;
-  countdownTimer = 550;
+  countdownTimer = 350;
   gameState = 'countdown';
   startBGM();
 }
@@ -1961,8 +1961,8 @@ function updateCountdown(dt) {
   if (countdownTimer <= 0) {
     countdownNum--;
     if (countdownNum === 0) {
-      // Show "GO!" for 400ms before starting
-      countdownTimer = 400;
+      // Show "GO!" for 280ms before starting
+      countdownTimer = 280;
       playCountdownTick(0);
     } else if (countdownNum < 0) {
       // GO! display time elapsed, now actually start
@@ -1974,7 +1974,7 @@ function updateCountdown(dt) {
       combo = 0; comboTimer = 0; bestCombo = 0;
       comboPopups = [];
     } else {
-      countdownTimer = 550;
+      countdownTimer = 350;
       playCountdownTick(countdownNum);
     }
   }
