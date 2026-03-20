@@ -41,7 +41,7 @@ const CONFIG = {
   BOUNCE_SIDE_VX: 5.0,
   AIR_FRICTION: 0.997,
   // Speed system
-  SPEED_INITIAL: 1.2,
+  SPEED_INITIAL: 1.0,
   SPEED_INCREMENT: 0.1,
   SPEED_INTERVAL: 2000,
   SPEED_MAX: 1.8,
@@ -63,7 +63,7 @@ if (isMobile) {
   CONFIG.SEESAW_WIDTH = 280;
   CONFIG.SEESAW_Y = 540;
   CONFIG.GROUND_TOP = CONFIG.HEIGHT - 80;
-  CONFIG.SPEED_INITIAL = 0.8;
+  CONFIG.SPEED_INITIAL = 0.6;
   CONFIG.SPEED_INCREMENT = 0.1;
   CONFIG.SPEED_MAX = 1.8;
   CONFIG.FLOWER_ROWS = 3;
@@ -1564,7 +1564,7 @@ function drawMobileDragGuide(ctx) {
   const cx = CONFIG.WIDTH / 2;
   // Finger swipe animation: oscillate left-right
   const t = (Date.now() % 2000) / 2000; // 0~1 over 2s cycle
-  const swipeX = Math.sin(t * Math.PI * 2) * 80; // -80~+80 range
+  const swipeX = Math.sin(t * Math.PI * 2) * 120; // -120~+120 range
   const fadeAlpha = 0.6 + Math.sin(Date.now() * 0.004) * 0.2; // 0.4~0.8
 
   ctx.save();
@@ -1576,38 +1576,32 @@ function drawMobileDragGuide(ctx) {
   // Finger circle
   ctx.fillStyle = 'rgba(100,100,100,0.5)';
   ctx.beginPath();
-  ctx.arc(fx, fy, 18, 0, Math.PI * 2);
+  ctx.arc(fx, fy, 26, 0, Math.PI * 2);
   ctx.fill();
   // Finger "nail" highlight
   ctx.fillStyle = 'rgba(200,200,200,0.6)';
   ctx.beginPath();
-  ctx.arc(fx, fy - 4, 10, Math.PI, 0);
+  ctx.arc(fx, fy - 6, 14, Math.PI, 0);
   ctx.fill();
   // Motion trail
   ctx.strokeStyle = 'rgba(150,150,150,0.3)';
-  ctx.lineWidth = 3;
-  ctx.setLineDash([8, 6]);
+  ctx.lineWidth = 4;
+  ctx.setLineDash([10, 8]);
   ctx.beginPath();
-  ctx.moveTo(cx - 70, fy);
-  ctx.lineTo(cx + 70, fy);
+  ctx.moveTo(cx - 110, fy);
+  ctx.lineTo(cx + 110, fy);
   ctx.stroke();
   ctx.setLineDash([]);
 
   // Left-right arrows
   ctx.fillStyle = 'rgba(120,120,120,0.45)';
   ctx.beginPath();
-  ctx.moveTo(cx - 90, fy); ctx.lineTo(cx - 75, fy - 8); ctx.lineTo(cx - 75, fy + 8);
+  ctx.moveTo(cx - 130, fy); ctx.lineTo(cx - 112, fy - 12); ctx.lineTo(cx - 112, fy + 12);
   ctx.fill();
   ctx.beginPath();
-  ctx.moveTo(cx + 90, fy); ctx.lineTo(cx + 75, fy - 8); ctx.lineTo(cx + 75, fy + 8);
+  ctx.moveTo(cx + 130, fy); ctx.lineTo(cx + 112, fy - 12); ctx.lineTo(cx + 112, fy + 12);
   ctx.fill();
 
-  // Text below
-  ctx.fillStyle = 'rgba(80,80,80,0.7)';
-  ctx.font = 'bold 28px "Segoe UI", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  ctx.fillText('拖拽移动', cx, fy + 28);
 
   ctx.restore();
 }
@@ -2078,11 +2072,11 @@ function drawCountdown(ctx) {
   // Flashing hint text on PC during countdown (between countdown and seesaw)
   if (!isMobile && countdownNum > 0) {
     const hintAlpha = Math.sin(animFrame * 0.12) * 0.4 + 0.6; // 0.2~1.0 flashing
-    const hintY = (CONFIG.HEIGHT / 2 + CONFIG.SEESAW_Y) / 2;
+    const hintY = (CONFIG.HEIGHT / 2 + CONFIG.SEESAW_Y) / 2 + 40;
     ctx.save();
     ctx.globalAlpha = hintAlpha;
     ctx.fillStyle = '#555';
-    ctx.font = 'bold 22px "Segoe UI", sans-serif';
+    ctx.font = 'bold 30px "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('单击切换跷跷板方向', CONFIG.WIDTH / 2, hintY);
