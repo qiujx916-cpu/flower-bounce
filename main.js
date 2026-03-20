@@ -64,7 +64,7 @@ if (isMobile) {
   CONFIG.SPEED_INITIAL = 0.8;
   CONFIG.FLOWER_ROWS = 3;
   CONFIG.FLOWER_SPEEDS = [1.2, -0.9, 1.1];
-  CONFIG.CHAR_RADIUS = 28;    // larger character on mobile
+  CONFIG.CHAR_RADIUS = 34;    // larger character on mobile
   CONFIG.FLOWER_RADIUS = 20;  // larger flowers on mobile (default 16)
 }
 
