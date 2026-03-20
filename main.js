@@ -710,7 +710,7 @@ class Character {
       combo++;
       comboTimer = CONFIG.COMBO_WINDOW;
       if (combo > bestCombo) bestCombo = combo;
-      const basePoints = (ri === 0) ? 2 : 1; // top row = 2 points
+      const basePoints = (ri <= 1) ? 2 : 1; // top 2 rows = 2 points
       const points = basePoints + Math.floor(combo / 5);
       score += points;
 
