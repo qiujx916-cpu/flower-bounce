@@ -383,6 +383,8 @@ class Character {
     this.armAnim = 0;
     this._sameEndMiss = false;
     this._fallBounceCount = 0; // fall-on-flower bounces this launch (max 2)
+    this._hitImmunity = 0;     // frames of collision immunity after fall-bounce
+    this._immuneRow = -1;      // which row to skip during immunity
     // Chain eat state
     this._chainQueue = [];
     this._chainDir = 0;
@@ -661,9 +663,14 @@ class Character {
       return; // skip normal physics while chaining
     }
 
+    // Decrement collision immunity timer
+    if (this._hitImmunity > 0) this._hitImmunity--;
+
     // Flower collision - with bounce-back and chain-eat mechanics
     for (let ri = 0; ri < flowerRows.length; ri++) {
       const row = flowerRows[ri];
+      // Skip row if immune from recent fall-bounce on this row
+      if (this._hitImmunity > 0 && this._immuneRow === ri) continue;
       const hitIdx = row.checkCollision(this.x, this.y, CONFIG.CHAR_RADIUS);
       if (hitIdx < 0) continue;
 
@@ -802,6 +809,9 @@ class Character {
         this.vy = -Math.max(minBounceVy, Math.abs(this.vy) * 0.5);
         this.vx = this.vx * 0.9;
         this.squash = 0.6;
+        // Immunity: skip this row for several frames to prevent oscillation flicker
+        this._hitImmunity = 8;
+        this._immuneRow = ri;
       }
 
       break; // only hit one row per frame
