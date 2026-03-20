@@ -1497,7 +1497,7 @@ function drawIconButton(ctx, x, y, size, emoji) {
 
 // --- Mobile Swap Button ---
 // Circle button, left-center area, always visible on mobile
-const SWAP_BTN = { cx: 85, cy: 390, radius: 72 };
+const SWAP_BTN = { cx: 95, cy: 345, radius: 90 };
 
 function drawMobileSwapButton(ctx) {
   const b = SWAP_BTN;
@@ -1522,17 +1522,17 @@ function drawMobileSwapButton(ctx) {
   ctx.save();
   ctx.translate(b.cx, b.cy);
   ctx.strokeStyle = `rgba(233,30,99,${iconAlpha})`;
-  ctx.lineWidth = 3.5;
+  ctx.lineWidth = 4.5;
   ctx.lineCap = 'round';
   // Left arrow
   ctx.beginPath();
-  ctx.moveTo(26, -11); ctx.lineTo(-26, -11);
-  ctx.moveTo(-19, -19); ctx.lineTo(-26, -11); ctx.lineTo(-19, -3);
+  ctx.moveTo(34, -14); ctx.lineTo(-34, -14);
+  ctx.moveTo(-25, -24); ctx.lineTo(-34, -14); ctx.lineTo(-25, -4);
   ctx.stroke();
   // Right arrow
   ctx.beginPath();
-  ctx.moveTo(-26, 11); ctx.lineTo(26, 11);
-  ctx.moveTo(19, 3); ctx.lineTo(26, 11); ctx.lineTo(19, 19);
+  ctx.moveTo(-34, 14); ctx.lineTo(34, 14);
+  ctx.moveTo(25, 4); ctx.lineTo(34, 14); ctx.lineTo(25, 24);
   ctx.stroke();
   ctx.restore();
 
@@ -1552,9 +1552,64 @@ function isTouchInSwapBtn(gx, gy) {
   const b = SWAP_BTN;
   const dx = gx - b.cx;
   const dy = gy - b.cy;
-  // Generous hit area: radius + 20px padding
-  const hitR = b.radius + 20;
+  // Generous hit area: radius + 30px padding
+  const hitR = b.radius + 30;
   return dx * dx + dy * dy <= hitR * hitR;
+}
+
+// --- Mobile Drag Guide (shown during countdown) ---
+function drawMobileDragGuide(ctx) {
+  if (!isMobile || gameState !== 'countdown') return;
+  const cy = CONFIG.SEESAW_Y + 55; // below seesaw
+  const cx = CONFIG.WIDTH / 2;
+  // Finger swipe animation: oscillate left-right
+  const t = (Date.now() % 2000) / 2000; // 0~1 over 2s cycle
+  const swipeX = Math.sin(t * Math.PI * 2) * 80; // -80~+80 range
+  const fadeAlpha = 0.6 + Math.sin(Date.now() * 0.004) * 0.2; // 0.4~0.8
+
+  ctx.save();
+  ctx.globalAlpha = fadeAlpha;
+
+  // Finger icon (teardrop/circle)
+  const fx = cx + swipeX;
+  const fy = cy;
+  // Finger circle
+  ctx.fillStyle = 'rgba(100,100,100,0.5)';
+  ctx.beginPath();
+  ctx.arc(fx, fy, 18, 0, Math.PI * 2);
+  ctx.fill();
+  // Finger "nail" highlight
+  ctx.fillStyle = 'rgba(200,200,200,0.6)';
+  ctx.beginPath();
+  ctx.arc(fx, fy - 4, 10, Math.PI, 0);
+  ctx.fill();
+  // Motion trail
+  ctx.strokeStyle = 'rgba(150,150,150,0.3)';
+  ctx.lineWidth = 3;
+  ctx.setLineDash([8, 6]);
+  ctx.beginPath();
+  ctx.moveTo(cx - 70, fy);
+  ctx.lineTo(cx + 70, fy);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Left-right arrows
+  ctx.fillStyle = 'rgba(120,120,120,0.45)';
+  ctx.beginPath();
+  ctx.moveTo(cx - 90, fy); ctx.lineTo(cx - 75, fy - 8); ctx.lineTo(cx - 75, fy + 8);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(cx + 90, fy); ctx.lineTo(cx + 75, fy - 8); ctx.lineTo(cx + 75, fy + 8);
+  ctx.fill();
+
+  // Text below
+  ctx.fillStyle = 'rgba(80,80,80,0.7)';
+  ctx.font = 'bold 28px "Segoe UI", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText('拖拽移动', cx, fy + 28);
+
+  ctx.restore();
 }
 
 // --- Leaderboard Panel (Online) ---
@@ -2236,6 +2291,7 @@ function gameLoop(timestamp) {
 
   if (gameState === 'countdown') {
     drawCountdown(ctx);
+    drawMobileDragGuide(ctx);
   }
 
   // Pause overlay
@@ -2464,10 +2520,7 @@ function onTouchStart(e) {
       continue; // don't move seesaw for this touch
     }
 
-    // Otherwise this touch controls the seesaw
-    mouseX = pos.x;
-    hoverMouseX = pos.x;
-    hoverMouseY = pos.y;
+    // Otherwise this touch controls the seesaw (drag only, no instant jump)
     _lastTouchX = pos.x;
     _lastTouchY = pos.y;
     _touchActive = true;
