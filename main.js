@@ -704,15 +704,15 @@ class Character {
         }
       }
 
-      // --- Gap-slide chain-eat (patch): character passes through a gap in current row ---
-      // Trigger when: hit a flower right at the edge of a gap (adjacent to empty slot in move direction)
-      // and there are >=2 consecutive flowers ahead
+      // --- Gap-slide chain-eat (patch): character enters from a gap in current row ---
+      // Trigger when: the flower hit is at the edge of a gap (the slot the character came from is empty)
+      // i.e. character entered the gap and the first flower it touches starts the chain
       if (bounceCount >= 5 && !this._chainQueue.length) {
         const moveDir = (this.vx >= 0) ? 1 : -1;
-        // Check if there's a gap (inactive flower) on the opposite side of movement direction
-        const behindIdx = hitIdx - moveDir;
-        const hasGapBehind = behindIdx < 0 || behindIdx >= row.flowers.length || !row.flowers[behindIdx].active;
-        if (hasGapBehind) {
+        // Check if the slot character came from (behind in move direction) is a gap
+        const cameFromIdx = hitIdx - moveDir;
+        const enteredFromGap = cameFromIdx < 0 || cameFromIdx >= row.flowers.length || !row.flowers[cameFromIdx].active;
+        if (enteredFromGap) {
           const adj = row.getAdjacentActive(hitIdx, moveDir);
           if (adj.length >= 2) {
             const maxChain = Math.min(adj.length, 40);
