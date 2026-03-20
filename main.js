@@ -1,5 +1,6 @@
 // ============================================================
 // Flower Bounce - Pure HTML5 Canvas 2D Game
+// Version: 1.0
 // ============================================================
 
 // --- Configuration ---
@@ -383,7 +384,6 @@ class Character {
     this.armAnim = 0;
     this._sameEndMiss = false;
     this._fallBounceCount = 0; // fall-on-flower bounces this launch (max 2)
-    this._hitImmunity = 0;     // frames of GLOBAL collision immunity (skip ALL rows)
     // Chain eat state
     this._chainQueue = [];
     this._chainDir = 0;
@@ -658,18 +658,11 @@ class Character {
         // Chain done - continue with momentum in the slide direction
         this.vx = this._chainDir * 2.5;
         this.vy = 1.5; // gentle fall after chain
-        this._hitImmunity = 10; // brief immunity after chain to avoid instant re-collision
       }
       return; // skip normal physics while chaining
     }
 
-    // Decrement collision immunity timer
-    if (this._hitImmunity > 0) this._hitImmunity--;
-
     // Flower collision - with bounce-back and chain-eat mechanics
-    // Skip ALL rows during global immunity (prevents oscillation flicker between rows)
-    if (this._hitImmunity > 0) return;
-
     for (let ri = 0; ri < flowerRows.length; ri++) {
       const row = flowerRows[ri];
       const hitIdx = row.checkCollision(this.x, this.y, CONFIG.CHAR_RADIUS);
@@ -801,8 +794,7 @@ class Character {
 
       // --- Physics after hitting flower ---
       // Rule: only fall-bounce (vy>0, count<2) triggers upward bounce.
-      //       ALL other collisions → deflect downward.
-      // Global immunity (all rows) prevents oscillation flicker.
+      //       ALL other collisions → deflect downward + exhaust fall-bounce.
       if (this.vy > 0 && this._fallBounceCount < 2) {
         // Fall-bounce: bounce upward, enough to reach the row above
         this._fallBounceCount++;
@@ -810,11 +802,11 @@ class Character {
         this.vy = -Math.max(minBounceVy, Math.abs(this.vy) * 0.5);
         this.vx = this.vx * 0.9;
         this.squash = 0.6;
-        this._hitImmunity = 14; // global immunity: ~230ms, enough to clear both adjacent rows
       } else {
-        // All other cases (rising, or fall-bounce exhausted): force downward
+        // Rising hit or fall-bounce exhausted: force downward
+        // Exhaust fall-bounce counter to prevent further oscillation
+        this._fallBounceCount = 2;
         this.vy = Math.max(2, Math.abs(this.vy) * 0.3);
-        this._hitImmunity = 14;
       }
 
       break; // only hit one row per frame
