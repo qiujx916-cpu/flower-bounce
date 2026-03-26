@@ -21,6 +21,14 @@
       style="position:absolute;left:-9999px;top:50%;opacity:0;pointer-events:none;font-size:16px;">
   </div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script>
+    // Early wake-up: fire a lightweight fetch to wake Supabase from cold start
+    // before main.js initializes. Result is cached and reused.
+    window.__earlyScores = fetch(
+      'https://agpnyrstzndyjmhfjcac.supabase.co/rest/v1/scores?select=name,score,platform,created_at&order=score.desc&limit=100',
+      { headers: { 'apikey': 'sb_publishable_TFePA_YX31tKgjTiBzyuBg_SJgTpTs6', 'Authorization': 'Bearer sb_publishable_TFePA_YX31tKgjTiBzyuBg_SJgTpTs6' } }
+    ).then(r => r.ok ? r.json() : null).catch(() => null);
+  </script>
   <script src="main.js"></script>
 </body>
 </html>

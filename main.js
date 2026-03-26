@@ -217,28 +217,44 @@ let showNameInput = false;   // show name input on game over
 let nameInputText = '';
 let nameInputCursor = 0;     // blink timer
 
+// Deduplicate scores: keep only the highest score per name
+function dedupeScores(data) {
+  const seen = new Map();
+  const deduped = [];
+  for (const entry of data) {
+    const key = entry.name || '匿名';
+    if (!seen.has(key)) {
+      seen.set(key, true);
+      deduped.push(entry);
+    }
+  }
+  return deduped;
+}
+
 // Fetch top scores from Supabase (deduplicated: one entry per name, highest score only)
 async function fetchOnlineScores() {
-  if (!sbClient) return;
   onlineScoresLoading = true;
   try {
+    // Try early-fetched data first (fired before main.js loaded)
+    if (window.__earlyScores) {
+      const earlyData = await window.__earlyScores;
+      window.__earlyScores = null; // consume once
+      if (earlyData && Array.isArray(earlyData) && earlyData.length > 0) {
+        onlineScores = dedupeScores(earlyData);
+        onlineScoresLoaded = true;
+        onlineScoresLoading = false;
+        return;
+      }
+    }
+    // Fallback to SDK fetch
+    if (!sbClient) { onlineScoresLoading = false; return; }
     const { data, error } = await sbClient
       .from('scores')
       .select('name, score, platform, created_at')
       .order('score', { ascending: false })
       .limit(100);
     if (!error && data) {
-      // Client-side deduplication: keep only the highest score per name
-      const seen = new Map();
-      const deduped = [];
-      for (const entry of data) {
-        const key = entry.name || '匿名';
-        if (!seen.has(key)) {
-          seen.set(key, true);
-          deduped.push(entry);
-        }
-      }
-      onlineScores = deduped;
+      onlineScores = dedupeScores(data);
       onlineScoresLoaded = true;
     }
   } catch (e) { console.warn('Fetch scores failed:', e); }
@@ -1631,7 +1647,7 @@ function drawLeaderboardPanel(ctx) {
   const listTop = py + 60;
   const rowH = 30;
 
-  if (onlineScoresLoading && !onlineScoresLoaded) {
+  if (onlineScores.length === 0 && onlineScoresLoading) {
     ctx.fillStyle = '#999';
     ctx.font = '20px "Segoe UI", sans-serif';
     ctx.fillText('加载中...', CONFIG.WIDTH / 2, listTop + 60);
@@ -1852,11 +1868,11 @@ function drawGameOver(ctx) {
   // regardless of whether the async DB update has completed yet.
   const merged = buildMergedScores(onlineScores, myName, score, myPlatform);
 
-  if (onlineScoresLoading && !onlineScoresLoaded && merged.length === 0) {
+  if (merged.length <= 1 && !onlineScoresLoaded) {
     ctx.fillStyle = '#999';
     ctx.font = '18px "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('加载中...', CONFIG.WIDTH / 2, listTop + 50);
+    ctx.fillText('排行榜加载中...', CONFIG.WIDTH / 2, listTop + 50);
   } else if (merged.length === 0) {
     ctx.fillStyle = '#999';
     ctx.font = '18px "Segoe UI", sans-serif';
@@ -1976,6 +1992,18 @@ function gameOver() {
     nameInputCursor = 0;
     if (_nameInputEl) _nameInputEl.value = '';
     fetchOnlineScores();
+  }
+  // If online scores haven't loaded yet, retry with backoff
+  if (!onlineScoresLoaded) {
+    let retries = 0;
+    const retryFetch = () => {
+      if (onlineScoresLoaded || retries >= 3) return;
+      retries++;
+      fetchOnlineScores().then(() => {
+        if (!onlineScoresLoaded) setTimeout(retryFetch, 3000);
+      });
+    };
+    setTimeout(retryFetch, 2000);
   }
 }
 
